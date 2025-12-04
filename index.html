@@ -1,34 +1,96 @@
-<!doctype html>
-<html lang="pt-BR">
+<!DOCTYPE html>
+<html lang="pt-br">
 <head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
-<title>3-Corpos — Mobile (Verlet + Pinch Zoom)</title>
+<meta charset="UTF-8">
+<title>Simulação – Três Corpos</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
 <style>
-  :root { --bg:#000; --panel:#0f1720; --accent:#0a84ff; --ui:#ddd; }
-  html,body{height:100%;margin:0;background:var(--bg);color:var(--ui);-webkit-tap-highlight-color:transparent; touch-action: none;}
-  #canvas{display:block;width:100vw;height:100vh;}
-  #uiBtn{
-    position:fixed; left:12px; top:12px; z-index:20;
-    background:rgba(255,255,255,0.06); border:0; color:var(--ui); padding:8px 10px; border-radius:8px; font-weight:600;
+  html, body {
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    background: #000;
+    touch-action: none;
+    font-family: sans-serif;
+    color: white;
   }
-  #panel{
-    position:fixed; right:-320px; top:0; height:100vh; width:300px; background:var(--panel); padding:16px; box-sizing:border-box;
-    transition:right .28s ease; z-index:21; color:var(--ui); font-family:system-ui,Arial;
+
+  #canvas {
+    width: 100vw;
+    height: 100vh;
+    display: block;
+    touch-action: none;
   }
-  #panel.open{ right:0; }
-  label{display:block;margin-top:10px;font-size:13px;color:#cbd5e1;}
-  input[type="number"], input[type="range"]{ width:100%; margin-top:6px; padding:8px; border-radius:6px; border:0; background:#0b1220; color:var(--ui); }
-  button{ margin-top:12px; width:100%; padding:10px; border-radius:8px; border:0; background:var(--accent); color:white; font-weight:700; }
-  .small{ font-size:12px; color:#94a3b8; margin-top:6px; }
-  .footer { position:fixed; right:12px; bottom:12px; z-index:20; color:#9ca3af; background:rgba(255,255,255,0.03); padding:6px 8px; border-radius:6px; font-size:12px; }
+
+  #uiBtn {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    z-index: 15;
+    background: #333;
+    border: none;
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 16px;
+    color: white;
+  }
+
+  #panel {
+    position: absolute;
+    top:0;
+    right:0;
+    width:260px;
+    background:#111;
+    color:white;
+    padding:16px;
+    border-left:2px solid #222;
+    height:100%;
+    display:none;
+    z-index:20;
+  }
+
+  #panel input, #panel button {
+    width: 100%;
+    margin: 4px 0 12px 0;
+    padding: 6px;
+    font-size: 15px;
+    border-radius: 6px;
+    border: none;
+  }
+
+  #panel button {
+    background: #4caf50;
+    color: white;
+  }
+
+  .small {
+    font-size: 12px;
+    opacity: .7;
+    margin-bottom: 10px;
+  }
+
+  .footer {
+    position: absolute;
+    bottom: 10px;
+    width: 100%;
+    text-align: center;
+    color: #aaa;
+    font-size: 13px;
+    pointer-events:none;
+  }
 </style>
 </head>
 <body>
-<aside id="panel" aria-hidden="true" style="position:absolute; top:0; right:0; width:260px; background:#111; color:white; padding:16px; border-left:2px solid #222; height:100%; display:none; z-index:20;">
 
-  <!-- Botão de FECHAR -->
-  <button id="closePanel" aria-label="Fechar painel" style="
+<canvas id="canvas"></canvas>
+
+<button id="uiBtn">⚙ Configurar</button>
+
+<!-- Painel lateral com botão de fechar -->
+<aside id="panel" aria-hidden="true">
+
+  <button id="closePanel" style="
     position:absolute;
     top:8px;
     right:8px;
@@ -37,415 +99,247 @@
     color:white;
     padding:4px 10px;
     font-size:16px;
-    border-radius:6px;
-  ">X</button>
+    border-radius:6px;">X</button>
 
-  <h3 style="margin:0 0 10px 0;">Criar corpo</h3>
+  <h3 style="margin:0 0 6px 0;">Criar corpo</h3>
 
-  <label for="massa">Massa</label>
+  <label>Massa</label>
   <input id="massa" type="number" value="20" step="1" min="0.1">
 
-  <label for="posX">Pos X (mundo)</label>
-  <input id="posX" type="number" value="-150" step="1">
+  <label>Pos X</label>
+  <input id="posX" type="number" value="-150">
 
-  <label for="posY">Pos Y (mundo)</label>
-  <input id="posY" type="number" value="0" step="1">
+  <label>Pos Y</label>
+  <input id="posY" type="number" value="0">
 
-  <label for="velX">Vel X</label>
-  <input id="velX" type="number" value="0" step="0.1">
+  <label>Vel X</label>
+  <input id="velX" type="number" value="0">
 
-  <label for="velY">Vel Y</label>
-  <input id="velY" type="number" value="1.2" step="0.1">
+  <label>Vel Y</label>
+  <input id="velY" type="number" value="1.2">
 
   <button id="addBtn">Adicionar corpo</button>
 
-  <div class="small">Toque e arraste na tela para criar um corpo: início = posição, arraste = velocidade.</div>
+  <div class="small">Toque na tela e arraste: início = posição, arrasto = velocidade.</div>
 
-  <hr style="margin:12px 0; border:none; border-top:1px solid rgba(255,255,255,0.06)">
+  <hr style="border:none; border-top:1px solid #333; margin:12px 0">
 
-  <label for="gRange">Constante G</label>
-  <input id="gRange" type="range" min="0.01" max="1.0" step="0.01" value="0.2">
+  <label>Constante G</label>
+  <input id="gRange" type="range" min="0.01" max="1.0" step="0.01" value="0.20">
   <div id="gVal" class="small">G = 0.20</div>
 
-  <label for="dtRange">Time-step (dt)</label>
+  <label>Time-step (dt)</label>
   <input id="dtRange" type="range" min="0.1" max="2" step="0.1" value="0.9">
   <div id="dtVal" class="small">dt = 0.90</div>
 
   <button id="resetBtn" style="background:#ef4444;">Resetar cena</button>
 </aside>
 
+<div class="footer">Rastro ≤ 450 pontos • Pinch-to-zoom & pan (mobile)</div>
+
+
 <script>
-  const uiBtn = document.getElementById("uiBtn");
-const panel = document.getElementById("panel");
-const closePanel = document.getElementById("closePanel");
+// -----------------------------------------------------------
+// Variáveis principais
+// -----------------------------------------------------------
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+let W = canvas.width = window.innerWidth;
+let H = canvas.height = window.innerHeight;
 
-// abrir
-uiBtn.onclick = () => {
-    panel.style.display = "block";
-    panel.setAttribute("aria-hidden", "false");
-};
+let bodies = [];
+let trails = [];
 
-// fechar
-closePanel.onclick = () => {
-    panel.style.display = "none";
-    panel.setAttribute("aria-hidden", "true");
-};
-/* === Config / Canvas / Camera (mobile-focused) === */
-const canvas = document.getElementById('canvas');
-const ctx = canvas.getContext('2d', { alpha: false });
-let DPR = Math.max(1, window.devicePixelRatio || 1);
+let G = 0.20;
+let dt = 0.90;
 
-function fitCanvas(){
-  DPR = Math.max(1, window.devicePixelRatio || 1);
-  canvas.style.width = innerWidth + 'px';
-  canvas.style.height = innerHeight + 'px';
-  canvas.width = Math.floor(innerWidth * DPR);
-  canvas.height = Math.floor(innerHeight * DPR);
-  ctx.setTransform(DPR,0,0,DPR,0,0);
-}
-fitCanvas();
-addEventListener('resize', fitCanvas);
+let camX = 0;
+let camY = 0;
+let zoom = 1;
 
-// world coordinates are in "pixels-like" units; camera keeps world position at screen center
-const cam = { x: 0, y: 0, scale: 1 }; // cam.x, cam.y = world coords at screen center
-function worldToScreen(p){
-  const cx = canvas.clientWidth/2, cy = canvas.clientHeight/2;
-  return { x: (p.x - cam.x)*cam.scale + cx, y: (p.y - cam.y)*cam.scale + cy };
-}
-function screenToWorld(sx, sy){
-  const cx = canvas.clientWidth/2, cy = canvas.clientHeight/2;
-  return { x: cam.x + (sx - cx)/cam.scale, y: cam.y + (sy - cy)/cam.scale };
-}
-
-/* === Simulation state === */
-let G = parseFloat(document.getElementById('gRange').value); // gravity constant (visual)
-let dt = parseFloat(document.getElementById('dtRange').value); // timestep
 const MAX_TRAIL = 450;
 
-// body factory
-function makeBody(m, x, y, vx=0, vy=0){
-  return { m: m, x: x, y: y, vx: vx, vy: vy, rgb: [200,200,255], trail: [] };
-}
+// -----------------------------------------------------------
+// Corpo celeste
+// -----------------------------------------------------------
+class Body {
+  constructor(x, y, vx, vy, m) {
+    this.x = x;
+    this.y = y;
+    this.vx = vx;
+    this.vy = vy;
+    this.m = m;
 
-// initial scene (world coords centered around 0)
-let bodies = [
-  makeBody(20, -150, 0, 0, 1.2),
-  makeBody(20, 150, 0, 0, -1.2),
-  makeBody(35, 0, 0, 0, 0)
-];
-
-// helper: recompute color mapping relative to all masses
-function recomputeColors(){
-  if(bodies.length === 0) return;
-  let minM = Infinity, maxM = -Infinity;
-  for(const b of bodies){ if(b.m < minM) minM = b.m; if(b.m > maxM) maxM = b.m; }
-  if(minM === maxM){ minM = minM * 0.5; maxM = maxM * 1.5; if(minM===maxM) { minM = 0; maxM = maxM||1; } }
-
-  for(const b of bodies){
-    let t = (b.m - minM) / (maxM - minM);
-    t = Math.max(0, Math.min(1, t));
-    // gradient: blue -> green -> yellow -> orange -> red
-    let r,g,bb;
-    if(t < 0.25){
-      let u = t/0.25;
-      r = lerp(40, 0, u); g = lerp(90,180,u); bb = lerp(255,200,u);
-    } else if(t < 0.5){
-      let u = (t-0.25)/0.25;
-      r = lerp(0,180,u); g = lerp(180,220,u); bb = lerp(200,80,u);
-    } else if(t < 0.75){
-      let u = (t-0.5)/0.25;
-      r = lerp(180,240,u); g = lerp(220,160,u); bb = lerp(80,40,u);
-    } else {
-      let u = (t-0.75)/0.25;
-      r = lerp(240,255,u); g = lerp(160,100,u); bb = lerp(40,20,u);
-    }
-    b.rgb = [Math.round(r), Math.round(g), Math.round(bb)];
+    this.color = getColorByMass(m);
+    this.ax = 0;
+    this.ay = 0;
   }
 }
 
-function lerp(a,b,t){ return a + (b-a)*t; }
+// -----------------------------------------------------------
+// Cor por massa
+// -----------------------------------------------------------
+function getColorByMass(m) {
+  const t = Math.min(1, Math.max(0, (m - 1) / 100));
+  const hue = 240 - 240 * t;
+  return `hsl(${hue}, 80%, 60%)`;
+}
 
-/* === Physics: Velocity Verlet === */
-// compute accelerations (returns arrays)
-function computeAccs(arr){
-  const n = arr.length;
-  const ax = new Array(n).fill(0);
-  const ay = new Array(n).fill(0);
-  const eps = 1.0; // softening to avoid huge forces in close approach
-  for(let i=0;i<n;i++){
-    for(let j=i+1;j<n;j++){
-      const A = arr[i], B = arr[j];
-      const dx = B.x - A.x;
-      const dy = B.y - A.y;
-      const dist2 = dx*dx + dy*dy + eps;
-      const dist = Math.sqrt(dist2);
-      const f = G * A.m * B.m / dist2;
-      const fx = f * dx / dist;
-      const fy = f * dy / dist;
-      ax[i] += fx / A.m; ay[i] += fy / A.m;
-      ax[j] -= fx / B.m; ay[j] -= fy / B.m;
+// -----------------------------------------------------------
+// Dinâmica – Velocity Verlet
+// -----------------------------------------------------------
+function computeGravity() {
+  for (let b of bodies) b.ax = b.ay = 0;
+
+  for (let i = 0; i < bodies.length; i++) {
+    for (let j = i + 1; j < bodies.length; j++) {
+      const a = bodies[i], b = bodies[j];
+
+      let dx = b.x - a.x;
+      let dy = b.y - a.y;
+
+      let r2 = dx*dx + dy*dy + 0.01;
+      let r = Math.sqrt(r2);
+      let f = G / r2;
+
+      let fx = f * dx / r;
+      let fy = f * dy / r;
+
+      a.ax += fx * b.m;
+      a.ay += fy * b.m;
+
+      b.ax -= fx * a.m;
+      b.ay -= fy * a.m;
     }
   }
-  return { ax, ay };
 }
 
-function stepVerlet(dtStep){
-  if(bodies.length === 0) return;
-  // 1) current acc
-  const { ax: ax0, ay: ay0 } = computeAccs(bodies);
-  // 2) update positions
-  for(let i=0;i<bodies.length;i++){
-    const b = bodies[i];
-    b.x += b.vx * dtStep + 0.5 * ax0[i] * dtStep * dtStep;
-    b.y += b.vy * dtStep + 0.5 * ay0[i] * dtStep * dtStep;
-  }
-  // 3) recompute acc
-  const { ax: ax1, ay: ay1 } = computeAccs(bodies);
-  // 4) update velocities & trails
-  for(let i=0;i<bodies.length;i++){
-    const b = bodies[i];
-    b.vx += 0.5 * (ax0[i] + ax1[i]) * dtStep;
-    b.vy += 0.5 * (ay0[i] + ay1[i]) * dtStep;
-    b.trail.push({ x: b.x, y: b.y });
-    if(b.trail.length > MAX_TRAIL) b.trail.shift();
+function updateBodies() {
+  computeGravity();
+
+  for (let b of bodies) {
+    b.vx += b.ax * dt;
+    b.vy += b.ay * dt;
+    b.x += b.vx * dt;
+    b.y += b.vy * dt;
   }
 }
 
-/* === Rendering === */
-function draw(){
-  // clear
-  ctx.fillStyle = '#000';
-  ctx.fillRect(0,0,canvas.clientWidth, canvas.clientHeight);
+// -----------------------------------------------------------
+// Renderização
+// -----------------------------------------------------------
+function worldToScreen(x, y) {
+  return [
+    (x - camX) * zoom + W/2,
+    (y - camY) * zoom + H/2
+  ];
+}
 
-  // recompute colors every frame (keeps relative mapping)
-  recomputeColors();
+function draw() {
+  ctx.fillStyle = "black";
+  ctx.fillRect(0,0,W,H);
 
-  // draw trails (dashed style)
-  ctx.lineWidth = 1;
-  ctx.setLineDash([6,6]);
-  for(const b of bodies){
-    if(b.trail.length < 2) continue;
+  bodies.forEach((b, i) => {
+    const [sx, sy] = worldToScreen(b.x, b.y);
+
+    ctx.fillStyle = b.color;
     ctx.beginPath();
-    ctx.strokeStyle = `rgba(${b.rgb[0]},${b.rgb[1]},${b.rgb[2]},0.28)`;
-    for(let i=0;i<b.trail.length-1;i++){
-      const p1 = worldToScreen(b.trail[i]);
-      const p2 = worldToScreen(b.trail[i+1]);
-      ctx.moveTo(p1.x, p1.y);
-      ctx.lineTo(p2.x, p2.y);
-    }
-    ctx.stroke();
-  }
-  ctx.setLineDash([]);
-
-  // draw bodies
-  for(const b of bodies){
-    const screen = worldToScreen(b);
-    const radius = Math.max(4, Math.log(b.m + 1) * 4) * cam.scale; // radius scales a bit with zoom for visibility
-    ctx.beginPath();
-    ctx.arc(screen.x, screen.y, Math.max(3, radius), 0, Math.PI*2);
-    ctx.fillStyle = `rgb(${b.rgb[0]},${b.rgb[1]},${b.rgb[2]})`;
+    ctx.arc(sx, sy, 6 * zoom, 0, 2*Math.PI);
     ctx.fill();
-    ctx.lineWidth = 1;
-    ctx.strokeStyle = `rgba(${b.rgb[0]},${b.rgb[1]},${b.rgb[2]},0.9)`;
+
+    if (!trails[i]) trails[i] = [];
+    trails[i].push([sx, sy]);
+    if (trails[i].length > MAX_TRAIL) trails[i].shift();
+
+    ctx.strokeStyle = b.color + "88";
+    ctx.beginPath();
+    for (let p = 0; p < trails[i].length; p++) {
+      const [tx, ty] = trails[i][p];
+      p === 0 ? ctx.moveTo(tx, ty) : ctx.lineTo(tx, ty);
+    }
     ctx.stroke();
-  }
+  });
 }
 
-/* === Main loop === */
-let last = performance.now();
-function loop(now){
-  // fixed-step simulation: run N steps per frame based on dt (dt is simulation step)
-  // to keep it simple we run one step per frame with chosen dt
-  stepVerlet(dt);
+// -----------------------------------------------------------
+// Loop
+// -----------------------------------------------------------
+function loop() {
+  updateBodies();
   draw();
   requestAnimationFrame(loop);
 }
-requestAnimationFrame(loop);
+loop();
 
-/* === UI: panel actions === */
-const uiBtn = document.getElementById('uiBtn');
-const panel = document.getElementById('panel');
-uiBtn.addEventListener('click', () => {
-  panel.classList.toggle('open');
-  panel.setAttribute('aria-hidden', panel.classList.contains('open') ? 'false' : 'true');
-});
-
-document.getElementById('addBtn').addEventListener('click', () => {
-  const m = parseFloat(document.getElementById('massa').value) || 10;
-  const x = parseFloat(document.getElementById('posX').value) || 0;
-  const y = parseFloat(document.getElementById('posY').value) || 0;
-  const vx = parseFloat(document.getElementById('velX').value) || 0;
-  const vy = parseFloat(document.getElementById('velY').value) || 0;
-  bodies.push(makeBody(m, x, y, vx, vy));
-  recomputeColors();
-});
-
-document.getElementById('resetBtn').addEventListener('click', () => {
-  bodies = [
-    makeBody(20, -150, 0, 0, 1.2),
-    makeBody(20, 150, 0, 0, -1.2),
-    makeBody(35, 0, 0, 0, 0)
-  ];
-  cam.x = 0; cam.y = 0; cam.scale = 1;
-  recomputeColors();
-});
-
-document.getElementById('gRange').addEventListener('input', (e) => {
-  G = parseFloat(e.target.value);
-  document.getElementById('gVal').textContent = `G = ${G.toFixed(2)}`;
-});
-document.getElementById('dtRange').addEventListener('input', (e) => {
-  dt = parseFloat(e.target.value);
-  document.getElementById('dtVal').textContent = `dt = ${dt.toFixed(2)}`;
-});
-
-/* === Touch handling (mobile only) === */
-// Single-finger pan / create-by-drag. Two-finger pinch-to-zoom centered on gesture point.
-let ongoingTouches = [];
-let touchState = {
-  mode: 'idle', // 'idle' | 'pan' | 'pinch' | 'creating'
-  startWorld: null, // for create: world pos at touchstart
-  startScreen: null,
-  lastPan: null,
-  lastDist: 0,
-  lastCenter: null
+// -----------------------------------------------------------
+// Painel
+// -----------------------------------------------------------
+document.getElementById("uiBtn").onclick = () => {
+  panel.style.display = "block";
+};
+document.getElementById("closePanel").onclick = () => {
+  panel.style.display = "none";
 };
 
-// helper: distance between two touches (client coords)
-function distTouches(a,b){ const dx=a.clientX-b.clientX, dy=a.clientY-b.clientY; return Math.hypot(dx,dy); }
-function centerTouches(a,b){ return { x:(a.clientX+b.clientX)/2, y:(a.clientY+b.clientY)/2 }; }
+document.getElementById("gRange").oninput = e => {
+  G = parseFloat(e.target.value);
+  gVal.textContent = "G = " + G.toFixed(2);
+};
+document.getElementById("dtRange").oninput = e => {
+  dt = parseFloat(e.target.value);
+  dtVal.textContent = "dt = " + dt.toFixed(2);
+};
 
-canvas.addEventListener('touchstart', (ev) => {
+document.getElementById("addBtn").onclick = () => {
+  const m = parseFloat(massa.value);
+  const x = parseFloat(posX.value);
+  const y = parseFloat(posY.value);
+  const vx = parseFloat(velX.value);
+  const vy = parseFloat(velY.value);
+
+  bodies.push(new Body(x, y, vx, vy, m));
+};
+
+document.getElementById("resetBtn").onclick = () => {
+  bodies = [];
+  trails = [];
+};
+
+// -----------------------------------------------------------
+// Mobile: zoom e pan
+// -----------------------------------------------------------
+let lastTouches = null;
+
+canvas.addEventListener("touchmove", ev => {
   ev.preventDefault();
-  const touches = ev.touches;
-  if(touches.length === 1){
-    // could be pan or creating a new body (we interpret as "creating" if user holds and drags; pan if immediate move)
-    touchState.mode = 'creating';
-    const t = touches[0];
-    touchState.startScreen = { x: t.clientX, y: t.clientY };
-    touchState.startWorld = screenToWorld(t.clientX, t.clientY);
-    touchState.lastPan = { x: t.clientX, y: t.clientY };
-  } else if(touches.length === 2){
-    touchState.mode = 'pinch';
-    const a = touches[0], b = touches[1];
-    touchState.lastDist = distTouches(a,b);
-    touchState.lastCenter = centerTouches(a,b);
-    touchState.pinchRefWorld = screenToWorld(touchState.lastCenter.x, touchState.lastCenter.y);
-    touchState.startScale = cam.scale;
+
+  if (ev.touches.length === 1 && lastTouches) {
+    const dx = ev.touches[0].clientX - lastTouches[0].clientX;
+    const dy = ev.touches[0].clientY - lastTouches[0].clientY;
+
+    camX -= dx / zoom;
+    camY -= dy / zoom;
   }
-}, { passive:false });
 
-canvas.addEventListener('touchmove', (ev) => {
-  ev.preventDefault();
-  const touches = ev.touches;
-  if(touches.length === 1 && touchState.mode === 'creating'){
-    // if user moves finger, we interpret as creating drag (show nothing, but track)
-    touchState.lastPan = { x: touches[0].clientX, y: touches[0].clientY };
-  } else if(touches.length === 1 && touchState.mode === 'pan'){
-    // not used here because we default to 'creating' on start; but keep for completeness
-    const t = touches[0];
-    const dx = t.clientX - touchState.lastPan.x;
-    const dy = t.clientY - touchState.lastPan.y;
-    touchState.lastPan = { x: t.clientX, y: t.clientY };
-    cam.x -= dx / cam.scale;
-    cam.y -= dy / cam.scale;
-  } else if(touches.length === 2 && touchState.mode === 'pinch'){
-    const a = touches[0], b = touches[1];
-    const newDist = distTouches(a,b);
-    const center = centerTouches(a,b);
-    // compute scale factor
-    const factor = newDist / (touchState.lastDist || newDist);
-    const newScale = Math.max(0.08, Math.min(8, touchState.startScale * factor));
-    // world point under gesture center should remain fixed on screen -> adjust cam
-    const screenCenter = { x: center.x, y: center.y };
-    const worldAtScreenBefore = touchState.pinchRefWorld; // computed on touchstart
-    // set new scale and compute cam so that worldAtScreenBefore maps to same screen pos
-    cam.scale = newScale;
-    cam.x = worldAtScreenBefore.x - (screenCenter.x - canvas.clientWidth/2) / cam.scale;
-    cam.y = worldAtScreenBefore.y - (screenCenter.y - canvas.clientHeight/2) / cam.scale;
-    // don't update lastDist to preserve reference to startScale -> pinch is relative to initial pinch
+  if (ev.touches.length === 2) {
+    let t1 = ev.touches[0];
+    let t2 = ev.touches[1];
+    let lt1 = lastTouches[0];
+    let lt2 = lastTouches[1];
+
+    let dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+    let lastDist = Math.hypot(lt2.clientX - lt1.clientX, lt2.clientY - lt1.clientY);
+
+    zoom *= dist / lastDist;
   }
-}, { passive:false });
 
-canvas.addEventListener('touchend', (ev) => {
-  ev.preventDefault();
-  // if we were in 'creating' mode and there was movement -> create body with velocity proportional to drag
-  // if there was little or no movement -> create body with zero velocity
-  if(touchState.mode === 'creating'){
-    // use changedTouches to get end position of the finger that started
-    const changed = ev.changedTouches[0];
-    if(changed){
-      const endScreen = { x: changed.clientX, y: changed.clientY };
-      const startScreen = touchState.startScreen;
-      const dx = endScreen.x - startScreen.x;
-      const dy = endScreen.y - startScreen.y;
-      const vx = dx * 0.02; // scale to tune
-      const vy = dy * 0.02;
-      // create with mass from panel input
-      const m = parseFloat(document.getElementById('massa').value) || 10;
-      const pos = touchState.startWorld || screenToWorld(startScreen.x, startScreen.y);
-      bodies.push(makeBody(m, pos.x, pos.y, vx, vy));
-      recomputeColors();
-    }
-  }
-  // if pinch ended, just reset mode
-  touchState.mode = 'idle';
-  touchState.lastDist = 0;
-  touchState.pinchRefWorld = null;
-}, { passive:false });
+  lastTouches = [...ev.touches];
+});
 
-canvas.addEventListener('touchcancel', (ev) => { touchState.mode='idle'; });
-
-/* === Optional: tap with two fingers to reset camera to center === */
-canvas.addEventListener('dblclick', (ev) => { cam.x = 0; cam.y = 0; cam.scale = 1; });
-
-/* === Simple UX: long-press + move = pan instead of create
-   If the user touches and holds without dragging small amount, we switch to pan.
-   Implementation: on touchstart we scheduled a timer; if move beyond threshold before timer -> create; if hold -> pan.
-*/
-let holdTimer = null;
-const HOLD_MS = 220;
-canvas.addEventListener('touchstart', (ev) => {
-  if(ev.touches.length !== 1) return;
-  clearTimeout(holdTimer);
-  const t = ev.touches[0];
-  holdTimer = setTimeout(() => {
-    // switch to pan mode
-    touchState.mode = 'pan';
-    touchState.lastPan = { x: t.clientX, y: t.clientY };
-  }, HOLD_MS);
-}, { passive:false });
-
-canvas.addEventListener('touchmove', (ev) => {
-  // if in pan mode and single touch, perform pan
-  if(ev.touches.length === 1 && touchState.mode === 'pan'){
-    const t = ev.touches[0];
-    const dx = t.clientX - touchState.lastPan.x;
-    const dy = t.clientY - touchState.lastPan.y;
-    touchState.lastPan = { x: t.clientX, y: t.clientY };
-    cam.x -= dx / cam.scale;
-    cam.y -= dy / cam.scale;
-  } else {
-    // if moved while waiting for holdTimer and moved more than threshold, cancel hold (we want create)
-    if(ev.touches.length === 1 && touchState.mode === 'creating'){
-      const t = ev.touches[0];
-      const dx = t.clientX - (touchState.startScreen ? touchState.startScreen.x : t.clientX);
-      const dy = t.clientY - (touchState.startScreen ? touchState.startScreen.y : t.clientY);
-      if(Math.hypot(dx,dy) > 8){
-        clearTimeout(holdTimer);
-      }
-    }
-  }
-}, { passive:false });
-
-canvas.addEventListener('touchend', (ev) => { clearTimeout(holdTimer); }, { passive:false });
-
-/* === Utility: show basic debug on rotate (optional) === */
-window.addEventListener('orientationchange', () => { fitCanvas(); });
-
-/* === initialization color recompute === */
-recomputeColors();
-
+canvas.addEventListener("touchend", () => {
+  lastTouches = null;
+});
 </script>
+
 </body>
 </html>
