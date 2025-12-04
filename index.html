@@ -25,12 +25,22 @@
 </style>
 </head>
 <body>
-<canvas id="canvas"></canvas>
+<aside id="panel" aria-hidden="true" style="position:absolute; top:0; right:0; width:260px; background:#111; color:white; padding:16px; border-left:2px solid #222; height:100%; display:none; z-index:20;">
 
-<button id="uiBtn" aria-label="Abrir painel">⚙ Configurar</button>
+  <!-- Botão de FECHAR -->
+  <button id="closePanel" aria-label="Fechar painel" style="
+    position:absolute;
+    top:8px;
+    right:8px;
+    background:#ef4444;
+    border:none;
+    color:white;
+    padding:4px 10px;
+    font-size:16px;
+    border-radius:6px;
+  ">X</button>
 
-<aside id="panel" aria-hidden="true">
-  <h3 style="margin:0 0 6px 0;">Criar corpo</h3>
+  <h3 style="margin:0 0 10px 0;">Criar corpo</h3>
 
   <label for="massa">Massa</label>
   <input id="massa" type="number" value="20" step="1" min="0.1">
@@ -51,7 +61,7 @@
 
   <div class="small">Toque e arraste na tela para criar um corpo: início = posição, arraste = velocidade.</div>
 
-  <hr style="margin:12px 0; border:none; border-top:1px solid rgba(255,255,255,0.04)">
+  <hr style="margin:12px 0; border:none; border-top:1px solid rgba(255,255,255,0.06)">
 
   <label for="gRange">Constante G</label>
   <input id="gRange" type="range" min="0.01" max="1.0" step="0.01" value="0.2">
@@ -64,9 +74,22 @@
   <button id="resetBtn" style="background:#ef4444;">Resetar cena</button>
 </aside>
 
-<div class="footer">Rastro ≤ 450 pontos • Pinch-to-zoom & pan (mobile)</div>
-
 <script>
+  const uiBtn = document.getElementById("uiBtn");
+const panel = document.getElementById("panel");
+const closePanel = document.getElementById("closePanel");
+
+// abrir
+uiBtn.onclick = () => {
+    panel.style.display = "block";
+    panel.setAttribute("aria-hidden", "false");
+};
+
+// fechar
+closePanel.onclick = () => {
+    panel.style.display = "none";
+    panel.setAttribute("aria-hidden", "true");
+};
 /* === Config / Canvas / Camera (mobile-focused) === */
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d', { alpha: false });
