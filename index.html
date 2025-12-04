@@ -1,236 +1,212 @@
 <!doctype html>
 <html lang="pt-BR">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Teoria dos Três Corpos — Verlet + Rastros</title>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+<title>3-Corpos — Mobile (Verlet + Pinch Zoom)</title>
 <style>
-  :root {
-    --bg: #000;
-    --ui-bg: rgba(255,255,255,0.06);
-    --ui-text: #ddd;
+  :root { --bg:#000; --panel:#0f1720; --accent:#0a84ff; --ui:#ddd; }
+  html,body{height:100%;margin:0;background:var(--bg);color:var(--ui);-webkit-tap-highlight-color:transparent; touch-action: none;}
+  #canvas{display:block;width:100vw;height:100vh;}
+  #uiBtn{
+    position:fixed; left:12px; top:12px; z-index:20;
+    background:rgba(255,255,255,0.06); border:0; color:var(--ui); padding:8px 10px; border-radius:8px; font-weight:600;
   }
-  html,body { height:100%; margin:0; background:var(--bg); color:var(--ui-text); font-family: Inter, Roboto, system-ui, sans-serif; }
-  #container { position:relative; height:100vh; width:100vw; overflow:hidden; }
-  canvas { display:block; background: linear-gradient(180deg, #030308 0%, #000000 100%); }
-  /* UI mínima */
-  .ui {
-    position: absolute;
-    left: 12px;
-    top: 12px;
-    background: var(--ui-bg);
-    color: var(--ui-text);
-    padding: 8px 10px;
-    border-radius: 8px;
-    font-size: 13px;
-    backdrop-filter: blur(4px);
+  #panel{
+    position:fixed; right:-320px; top:0; height:100vh; width:300px; background:var(--panel); padding:16px; box-sizing:border-box;
+    transition:right .28s ease; z-index:21; color:var(--ui); font-family:system-ui,Arial;
   }
-  .ui label { display:inline-block; margin-right:8px; }
-  .ui input[type="range"] { vertical-align: middle; width:120px; }
-  .ui .small { font-size:11px; opacity:0.9; }
-  .footer {
-    position: absolute;
-    right: 12px;
-    bottom: 12px;
-    color: #999;
-    font-size: 12px;
-    background: rgba(255,255,255,0.03);
-    padding:6px 8px;
-    border-radius:6px;
-  }
-  button { background: transparent; border:1px solid rgba(255,255,255,0.08); color:var(--ui-text); padding:6px 8px; border-radius:6px; cursor:pointer; }
-  button:active{ transform:translateY(1px); }
+  #panel.open{ right:0; }
+  label{display:block;margin-top:10px;font-size:13px;color:#cbd5e1;}
+  input[type="number"], input[type="range"]{ width:100%; margin-top:6px; padding:8px; border-radius:6px; border:0; background:#0b1220; color:var(--ui); }
+  button{ margin-top:12px; width:100%; padding:10px; border-radius:8px; border:0; background:var(--accent); color:white; font-weight:700; }
+  .small{ font-size:12px; color:#94a3b8; margin-top:6px; }
+  .footer { position:fixed; right:12px; bottom:12px; z-index:20; color:#9ca3af; background:rgba(255,255,255,0.03); padding:6px 8px; border-radius:6px; font-size:12px; }
 </style>
 </head>
 <body>
-  <div id="container">
-    <canvas id="sim"></canvas>
+<canvas id="canvas"></canvas>
 
-    <div class="ui" id="ui">
-      <div style="margin-bottom:6px;"><strong>3-Corpos — Verlet</strong></div>
-      <div>
-        <label>dt</label>
-        <input id="dtRange" type="range" min="0.1" max="3" step="0.1" value="1">
-        <span id="dtVal" class="small">1.0</span>
-      </div>
-      <div style="margin-top:6px;">
-        <label>G</label>
-        <input id="gRange" type="range" min="0.01" max="1.0" step="0.01" value="0.2">
-        <span id="gVal" class="small">0.20</span>
-      </div>
-      <div style="margin-top:6px;">
-        <button id="resetBtn">Reset</button>
-        <button id="addBtn">Adicionar corpo</button>
-      </div>
-      <div style="margin-top:6px;" class="small">Clique e arraste para adicionar corpo com velocidade inicial.</div>
-    </div>
+<button id="uiBtn" aria-label="Abrir painel">⚙ Configurar</button>
 
-    <div class="footer">Rastro tracejado • máximo por corpo: 150</div>
-  </div>
+<aside id="panel" aria-hidden="true">
+  <h3 style="margin:0 0 6px 0;">Criar corpo</h3>
+
+  <label for="massa">Massa</label>
+  <input id="massa" type="number" value="20" step="1" min="0.1">
+
+  <label for="posX">Pos X (mundo)</label>
+  <input id="posX" type="number" value="-150" step="1">
+
+  <label for="posY">Pos Y (mundo)</label>
+  <input id="posY" type="number" value="0" step="1">
+
+  <label for="velX">Vel X</label>
+  <input id="velX" type="number" value="0" step="0.1">
+
+  <label for="velY">Vel Y</label>
+  <input id="velY" type="number" value="1.2" step="0.1">
+
+  <button id="addBtn">Adicionar corpo</button>
+
+  <div class="small">Toque e arraste na tela para criar um corpo: início = posição, arraste = velocidade.</div>
+
+  <hr style="margin:12px 0; border:none; border-top:1px solid rgba(255,255,255,0.04)">
+
+  <label for="gRange">Constante G</label>
+  <input id="gRange" type="range" min="0.01" max="1.0" step="0.01" value="0.2">
+  <div id="gVal" class="small">G = 0.20</div>
+
+  <label for="dtRange">Time-step (dt)</label>
+  <input id="dtRange" type="range" min="0.1" max="2" step="0.1" value="0.9">
+  <div id="dtVal" class="small">dt = 0.90</div>
+
+  <button id="resetBtn" style="background:#ef4444;">Resetar cena</button>
+</aside>
+
+<div class="footer">Rastro ≤ 450 pontos • Pinch-to-zoom & pan (mobile)</div>
 
 <script>
-/*
-  Simulação 3 corpos (2D) usando Velocity Verlet
-  - Cores automáticas por massa
-  - Rastros tracejados limitados (MAX_TRAIL)
-  - UI mínima para dt e G
-  - Arrastar no canvas para criar corpos com velocidade inicial
-*/
-
-// Canvas e contexto
-const canvas = document.getElementById('sim');
-const ctx = canvas.getContext('2d');
-
-// UI
-const dtRange = document.getElementById('dtRange');
-const dtVal = document.getElementById('dtVal');
-const gRange = document.getElementById('gRange');
-const gVal = document.getElementById('gVal');
-const resetBtn = document.getElementById('resetBtn');
-const addBtn = document.getElementById('addBtn');
-
+/* === Config / Canvas / Camera (mobile-focused) === */
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d', { alpha: false });
 let DPR = Math.max(1, window.devicePixelRatio || 1);
 
-// parâmetros
-let G = parseFloat(gRange.value);    // constante gravitacional (visual)
-let dt = parseFloat(dtRange.value);  // passo de tempo (fixo)
-const MAX_TRAIL = 150;               // limite de pontos no rastro por corpo
-
-// ajusta canvas para dpi
-function resize() {
+function fitCanvas(){
   DPR = Math.max(1, window.devicePixelRatio || 1);
-  const w = window.innerWidth;
-  const h = window.innerHeight;
-  canvas.style.width = w + 'px';
-  canvas.style.height = h + 'px';
-  canvas.width = Math.floor(w * DPR);
-  canvas.height = Math.floor(h * DPR);
-  ctx.setTransform(DPR, 0, 0, DPR, 0, 0); // escala para coordenadas CSS
+  canvas.style.width = innerWidth + 'px';
+  canvas.style.height = innerHeight + 'px';
+  canvas.width = Math.floor(innerWidth * DPR);
+  canvas.height = Math.floor(innerHeight * DPR);
+  ctx.setTransform(DPR,0,0,DPR,0,0);
 }
-window.addEventListener('resize', resize);
-resize();
+fitCanvas();
+addEventListener('resize', fitCanvas);
 
-// util: gerar cor por massa (retorna array [r,g,b])
-function corPorMassaRGB(m) {
-  // normaliza entre 0 e 1 (ajuste as faixas conforme as massas que usar)
-  const minM = 5;
-  const maxM = 60;
-  let t = (m - minM) / (maxM - minM);
-  t = Math.max(0, Math.min(1, t));
+// world coordinates are in "pixels-like" units; camera keeps world position at screen center
+const cam = { x: 0, y: 0, scale: 1 }; // cam.x, cam.y = world coords at screen center
+function worldToScreen(p){
+  const cx = canvas.clientWidth/2, cy = canvas.clientHeight/2;
+  return { x: (p.x - cam.x)*cam.scale + cx, y: (p.y - cam.y)*cam.scale + cy };
+}
+function screenToWorld(sx, sy){
+  const cx = canvas.clientWidth/2, cy = canvas.clientHeight/2;
+  return { x: cam.x + (sx - cx)/cam.scale, y: cam.y + (sy - cy)/cam.scale };
+}
 
-  // gradiente: azul -> verde -> amarelo -> vermelho
-  // vamos mapear t em duas fases para suavizar
-  if (t < 0.5) {
-    // azul (0,120,255) -> verde (0,200,80)
-    let u = t / 0.5;
-    let r = Math.round(0 + (0 - 0) * u);
-    let g = Math.round(120 + (200 - 120) * u);
-    let b = Math.round(255 + (80 - 255) * u);
-    return [r,g,b];
-  } else {
-    // verde -> vermelho (255,120,30)
-    let u = (t - 0.5) / 0.5;
-    let r = Math.round(0 + (255 - 0) * u);
-    let g = Math.round(200 + (120 - 200) * u);
-    let b = Math.round(80 + (30 - 80) * u);
-    return [r,g,b];
+/* === Simulation state === */
+let G = parseFloat(document.getElementById('gRange').value); // gravity constant (visual)
+let dt = parseFloat(document.getElementById('dtRange').value); // timestep
+const MAX_TRAIL = 450;
+
+// body factory
+function makeBody(m, x, y, vx=0, vy=0){
+  return { m: m, x: x, y: y, vx: vx, vy: vy, rgb: [200,200,255], trail: [] };
+}
+
+// initial scene (world coords centered around 0)
+let bodies = [
+  makeBody(20, -150, 0, 0, 1.2),
+  makeBody(20, 150, 0, 0, -1.2),
+  makeBody(35, 0, 0, 0, 0)
+];
+
+// helper: recompute color mapping relative to all masses
+function recomputeColors(){
+  if(bodies.length === 0) return;
+  let minM = Infinity, maxM = -Infinity;
+  for(const b of bodies){ if(b.m < minM) minM = b.m; if(b.m > maxM) maxM = b.m; }
+  if(minM === maxM){ minM = minM * 0.5; maxM = maxM * 1.5; if(minM===maxM) { minM = 0; maxM = maxM||1; } }
+
+  for(const b of bodies){
+    let t = (b.m - minM) / (maxM - minM);
+    t = Math.max(0, Math.min(1, t));
+    // gradient: blue -> green -> yellow -> orange -> red
+    let r,g,bb;
+    if(t < 0.25){
+      let u = t/0.25;
+      r = lerp(40, 0, u); g = lerp(90,180,u); bb = lerp(255,200,u);
+    } else if(t < 0.5){
+      let u = (t-0.25)/0.25;
+      r = lerp(0,180,u); g = lerp(180,220,u); bb = lerp(200,80,u);
+    } else if(t < 0.75){
+      let u = (t-0.5)/0.25;
+      r = lerp(180,240,u); g = lerp(220,160,u); bb = lerp(80,40,u);
+    } else {
+      let u = (t-0.75)/0.25;
+      r = lerp(240,255,u); g = lerp(160,100,u); bb = lerp(40,20,u);
+    }
+    b.rgb = [Math.round(r), Math.round(g), Math.round(bb)];
   }
 }
 
-// helper: rgb array -> css strings
-function rgbToString(rgb) { return `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`; }
-function rgbaToString(rgb, a) { return `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${a})`; }
+function lerp(a,b,t){ return a + (b-a)*t; }
 
-// corpo factory
-function corpo(m, x, y, vx=0, vy=0) {
-  const rgb = corPorMassaRGB(m);
-  return {
-    m, x, y, vx, vy,
-    rgb,
-    trail: []
-  };
-}
-
-// estado inicial: 3 corpos clássicos (mude se quiser)
-let corpos = [
-  corpo(20, window.innerWidth/2 - 150, window.innerHeight/2, 0, 1.2),
-  corpo(20, window.innerWidth/2 + 150, window.innerHeight/2, 0, -1.2),
-  corpo(35, window.innerWidth/2, window.innerHeight/2, 0, 0)
-];
-
-// função que calcula acelerações com base nas posições atuais
-function calcularAceleracoes(arr) {
+/* === Physics: Velocity Verlet === */
+// compute accelerations (returns arrays)
+function computeAccs(arr){
   const n = arr.length;
   const ax = new Array(n).fill(0);
   const ay = new Array(n).fill(0);
-
-  for (let i = 0; i < n; i++) {
-    for (let j = i + 1; j < n; j++) {
-      const dx = arr[j].x - arr[i].x;
-      const dy = arr[j].y - arr[i].y;
-      const dist2 = dx*dx + dy*dy;
-      const dist = Math.sqrt(dist2) + 1e-6; // evita div/0
-      // força com suavização pequena (epsilon) para evitar valores gigantes
-      const eps = 1.0; // ajuste se quiser menos suavização
-      const f = G * arr[i].m * arr[j].m / (dist2 + eps);
+  const eps = 1.0; // softening to avoid huge forces in close approach
+  for(let i=0;i<n;i++){
+    for(let j=i+1;j<n;j++){
+      const A = arr[i], B = arr[j];
+      const dx = B.x - A.x;
+      const dy = B.y - A.y;
+      const dist2 = dx*dx + dy*dy + eps;
+      const dist = Math.sqrt(dist2);
+      const f = G * A.m * B.m / dist2;
       const fx = f * dx / dist;
       const fy = f * dy / dist;
-
-      ax[i] += fx / arr[i].m;
-      ay[i] += fy / arr[i].m;
-
-      ax[j] -= fx / arr[j].m;
-      ay[j] -= fy / arr[j].m;
+      ax[i] += fx / A.m; ay[i] += fy / A.m;
+      ax[j] -= fx / B.m; ay[j] -= fy / B.m;
     }
   }
   return { ax, ay };
 }
 
-// Velocity Verlet: atualização
-function atualizarVerlet() {
-  // 1) aceleração atual
-  const { ax: ax0, ay: ay0 } = calcularAceleracoes(corpos);
-
-  // 2) atualiza posições
-  for (let i = 0; i < corpos.length; i++) {
-    const c = corpos[i];
-    c.x += c.vx * dt + 0.5 * ax0[i] * dt * dt;
-    c.y += c.vy * dt + 0.5 * ay0[i] * dt * dt;
+function stepVerlet(dtStep){
+  if(bodies.length === 0) return;
+  // 1) current acc
+  const { ax: ax0, ay: ay0 } = computeAccs(bodies);
+  // 2) update positions
+  for(let i=0;i<bodies.length;i++){
+    const b = bodies[i];
+    b.x += b.vx * dtStep + 0.5 * ax0[i] * dtStep * dtStep;
+    b.y += b.vy * dtStep + 0.5 * ay0[i] * dtStep * dtStep;
   }
-
-  // 3) recalcula acelerações com novas posições
-  const { ax: ax1, ay: ay1 } = calcularAceleracoes(corpos);
-
-  // 4) atualiza velocidades
-  for (let i = 0; i < corpos.length; i++) {
-    const c = corpos[i];
-    c.vx += 0.5 * (ax0[i] + ax1[i]) * dt;
-    c.vy += 0.5 * (ay0[i] + ay1[i]) * dt;
-  }
-
-  // 5) atualiza trails (limite)
-  for (let c of corpos) {
-    c.trail.push({ x: c.x, y: c.y });
-    if (c.trail.length > MAX_TRAIL) c.trail.shift();
+  // 3) recompute acc
+  const { ax: ax1, ay: ay1 } = computeAccs(bodies);
+  // 4) update velocities & trails
+  for(let i=0;i<bodies.length;i++){
+    const b = bodies[i];
+    b.vx += 0.5 * (ax0[i] + ax1[i]) * dtStep;
+    b.vy += 0.5 * (ay0[i] + ay1[i]) * dtStep;
+    b.trail.push({ x: b.x, y: b.y });
+    if(b.trail.length > MAX_TRAIL) b.trail.shift();
   }
 }
 
-// desenha rastros e corpos
-function desenhar() {
-  const w = canvas.clientWidth;
-  const h = canvas.clientHeight;
-  ctx.clearRect(0,0,w,h);
+/* === Rendering === */
+function draw(){
+  // clear
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0,0,canvas.clientWidth, canvas.clientHeight);
 
-  // desenha rastros tracejados
+  // recompute colors every frame (keeps relative mapping)
+  recomputeColors();
+
+  // draw trails (dashed style)
   ctx.lineWidth = 1;
-  ctx.setLineDash([6,6]); // tracejado
-  for (let c of corpos) {
-    if (c.trail.length < 2) continue;
+  ctx.setLineDash([6,6]);
+  for(const b of bodies){
+    if(b.trail.length < 2) continue;
     ctx.beginPath();
-    ctx.strokeStyle = rgbaToString(c.rgb, 0.28);
-    for (let i = 0; i < c.trail.length - 1; i++) {
-      const p1 = c.trail[i];
-      const p2 = c.trail[i+1];
+    ctx.strokeStyle = `rgba(${b.rgb[0]},${b.rgb[1]},${b.rgb[2]},0.28)`;
+    for(let i=0;i<b.trail.length-1;i++){
+      const p1 = worldToScreen(b.trail[i]);
+      const p2 = worldToScreen(b.trail[i+1]);
       ctx.moveTo(p1.x, p1.y);
       ctx.lineTo(p2.x, p2.y);
     }
@@ -238,98 +214,215 @@ function desenhar() {
   }
   ctx.setLineDash([]);
 
-  // desenha corpos
-  for (let c of corpos) {
+  // draw bodies
+  for(const b of bodies){
+    const screen = worldToScreen(b);
+    const radius = Math.max(4, Math.log(b.m + 1) * 4) * cam.scale; // radius scales a bit with zoom for visibility
     ctx.beginPath();
-    // raio visual baseado na massa
-    const raio = Math.max(4, Math.log(c.m + 1) * 4);
-    ctx.arc(c.x, c.y, raio, 0, Math.PI*2);
-    ctx.fillStyle = rgbToString(c.rgb);
+    ctx.arc(screen.x, screen.y, Math.max(3, radius), 0, Math.PI*2);
+    ctx.fillStyle = `rgb(${b.rgb[0]},${b.rgb[1]},${b.rgb[2]})`;
     ctx.fill();
-
-    // borda suave
     ctx.lineWidth = 1;
-    ctx.strokeStyle = rgbaToString(c.rgb, 0.9);
+    ctx.strokeStyle = `rgba(${b.rgb[0]},${b.rgb[1]},${b.rgb[2]},0.9)`;
     ctx.stroke();
   }
 }
 
-// loop principal
+/* === Main loop === */
 let last = performance.now();
-function loop(now) {
-  // nota: dt é o passo de simulação fixo controlado pela UI.
-  // fazemos apenas tantos passos de dt quanto seja necessário para não ficar lento
-  // (não é um integrador com substep baseado em tempo real — dt aqui controla a simulação)
-  atualizarVerlet();
-  desenhar();
+function loop(now){
+  // fixed-step simulation: run N steps per frame based on dt (dt is simulation step)
+  // to keep it simple we run one step per frame with chosen dt
+  stepVerlet(dt);
+  draw();
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
 
-// -- UI handlers --
-dtRange.addEventListener('input', (e) => {
-  dt = parseFloat(e.target.value);
-  dtVal.textContent = dt.toFixed(2);
-});
-gRange.addEventListener('input', (e) => {
-  G = parseFloat(e.target.value);
-  gVal.textContent = G.toFixed(2);
+/* === UI: panel actions === */
+const uiBtn = document.getElementById('uiBtn');
+const panel = document.getElementById('panel');
+uiBtn.addEventListener('click', () => {
+  panel.classList.toggle('open');
+  panel.setAttribute('aria-hidden', panel.classList.contains('open') ? 'false' : 'true');
 });
 
-// reset simples: recria a configuração inicial
-function resetScene() {
-  corpos = [
-    corpo(20, window.innerWidth/2 - 150, window.innerHeight/2, 0, 1.2),
-    corpo(20, window.innerWidth/2 + 150, window.innerHeight/2, 0, -1.2),
-    corpo(35, window.innerWidth/2, window.innerHeight/2, 0, 0)
+document.getElementById('addBtn').addEventListener('click', () => {
+  const m = parseFloat(document.getElementById('massa').value) || 10;
+  const x = parseFloat(document.getElementById('posX').value) || 0;
+  const y = parseFloat(document.getElementById('posY').value) || 0;
+  const vx = parseFloat(document.getElementById('velX').value) || 0;
+  const vy = parseFloat(document.getElementById('velY').value) || 0;
+  bodies.push(makeBody(m, x, y, vx, vy));
+  recomputeColors();
+});
+
+document.getElementById('resetBtn').addEventListener('click', () => {
+  bodies = [
+    makeBody(20, -150, 0, 0, 1.2),
+    makeBody(20, 150, 0, 0, -1.2),
+    makeBody(35, 0, 0, 0, 0)
   ];
-}
-resetBtn.addEventListener('click', resetScene);
-
-// adicionar corpo aleatório
-addBtn.addEventListener('click', () => {
-  // adiciona perto do centro com velocidade aleatória
-  const x = window.innerWidth/2 + (Math.random()-0.5)*200;
-  const y = window.innerHeight/2 + (Math.random()-0.5)*200;
-  const vx = (Math.random()-0.5) * 2;
-  const vy = (Math.random()-0.5) * 2;
-  const m = 8 + Math.random() * 40;
-  corpos.push(corpo(m, x, y, vx, vy));
+  cam.x = 0; cam.y = 0; cam.scale = 1;
+  recomputeColors();
 });
 
-// --- adicionar corpos por clique+arraste (arraste define velocidade inicial) ---
-let isDown = false;
-let downPos = null;
-canvas.addEventListener('pointerdown', (ev) => {
-  isDown = true;
-  downPos = { x: ev.clientX, y: ev.clientY, time: performance.now() };
+document.getElementById('gRange').addEventListener('input', (e) => {
+  G = parseFloat(e.target.value);
+  document.getElementById('gVal').textContent = `G = ${G.toFixed(2)}`;
 });
-canvas.addEventListener('pointerup', (ev) => {
-  if (!isDown || !downPos) { isDown = false; return; }
-  const upPos = { x: ev.clientX, y: ev.clientY };
-  const vx = (upPos.x - downPos.x) * 0.02; // escala de velocidade
-  const vy = (upPos.y - downPos.y) * 0.02;
-  // massa dependendo da duração do arrasto (mais tempo -> massa maior)
-  const dtDrag = Math.max(1, performance.now() - downPos.time);
-  const m = Math.min(60, 5 + dtDrag * 0.03);
-  corpos.push(corpo(m, downPos.x, downPos.y, vx, vy));
-  isDown = false;
-  downPos = null;
+document.getElementById('dtRange').addEventListener('input', (e) => {
+  dt = parseFloat(e.target.value);
+  document.getElementById('dtVal').textContent = `dt = ${dt.toFixed(2)}`;
 });
 
-// dica: evita seleção de texto durante arrasto
-canvas.addEventListener('pointermove', (ev) => {
-  if (isDown) ev.preventDefault();
-});
+/* === Touch handling (mobile only) === */
+// Single-finger pan / create-by-drag. Two-finger pinch-to-zoom centered on gesture point.
+let ongoingTouches = [];
+let touchState = {
+  mode: 'idle', // 'idle' | 'pan' | 'pinch' | 'creating'
+  startWorld: null, // for create: world pos at touchstart
+  startScreen: null,
+  lastPan: null,
+  lastDist: 0,
+  lastCenter: null
+};
 
-// inicializa texto UI
-dtVal.textContent = dt.toFixed(2);
-gVal.textContent = G.toFixed(2);
+// helper: distance between two touches (client coords)
+function distTouches(a,b){ const dx=a.clientX-b.clientX, dy=a.clientY-b.clientY; return Math.hypot(dx,dy); }
+function centerTouches(a,b){ return { x:(a.clientX+b.clientX)/2, y:(a.clientY+b.clientY)/2 }; }
 
-// resize pra garantir que corpos iniciais estejam centrados corretamente após load
-window.addEventListener('load', () => {
-  resize();
-});
+canvas.addEventListener('touchstart', (ev) => {
+  ev.preventDefault();
+  const touches = ev.touches;
+  if(touches.length === 1){
+    // could be pan or creating a new body (we interpret as "creating" if user holds and drags; pan if immediate move)
+    touchState.mode = 'creating';
+    const t = touches[0];
+    touchState.startScreen = { x: t.clientX, y: t.clientY };
+    touchState.startWorld = screenToWorld(t.clientX, t.clientY);
+    touchState.lastPan = { x: t.clientX, y: t.clientY };
+  } else if(touches.length === 2){
+    touchState.mode = 'pinch';
+    const a = touches[0], b = touches[1];
+    touchState.lastDist = distTouches(a,b);
+    touchState.lastCenter = centerTouches(a,b);
+    touchState.pinchRefWorld = screenToWorld(touchState.lastCenter.x, touchState.lastCenter.y);
+    touchState.startScale = cam.scale;
+  }
+}, { passive:false });
+
+canvas.addEventListener('touchmove', (ev) => {
+  ev.preventDefault();
+  const touches = ev.touches;
+  if(touches.length === 1 && touchState.mode === 'creating'){
+    // if user moves finger, we interpret as creating drag (show nothing, but track)
+    touchState.lastPan = { x: touches[0].clientX, y: touches[0].clientY };
+  } else if(touches.length === 1 && touchState.mode === 'pan'){
+    // not used here because we default to 'creating' on start; but keep for completeness
+    const t = touches[0];
+    const dx = t.clientX - touchState.lastPan.x;
+    const dy = t.clientY - touchState.lastPan.y;
+    touchState.lastPan = { x: t.clientX, y: t.clientY };
+    cam.x -= dx / cam.scale;
+    cam.y -= dy / cam.scale;
+  } else if(touches.length === 2 && touchState.mode === 'pinch'){
+    const a = touches[0], b = touches[1];
+    const newDist = distTouches(a,b);
+    const center = centerTouches(a,b);
+    // compute scale factor
+    const factor = newDist / (touchState.lastDist || newDist);
+    const newScale = Math.max(0.08, Math.min(8, touchState.startScale * factor));
+    // world point under gesture center should remain fixed on screen -> adjust cam
+    const screenCenter = { x: center.x, y: center.y };
+    const worldAtScreenBefore = touchState.pinchRefWorld; // computed on touchstart
+    // set new scale and compute cam so that worldAtScreenBefore maps to same screen pos
+    cam.scale = newScale;
+    cam.x = worldAtScreenBefore.x - (screenCenter.x - canvas.clientWidth/2) / cam.scale;
+    cam.y = worldAtScreenBefore.y - (screenCenter.y - canvas.clientHeight/2) / cam.scale;
+    // don't update lastDist to preserve reference to startScale -> pinch is relative to initial pinch
+  }
+}, { passive:false });
+
+canvas.addEventListener('touchend', (ev) => {
+  ev.preventDefault();
+  // if we were in 'creating' mode and there was movement -> create body with velocity proportional to drag
+  // if there was little or no movement -> create body with zero velocity
+  if(touchState.mode === 'creating'){
+    // use changedTouches to get end position of the finger that started
+    const changed = ev.changedTouches[0];
+    if(changed){
+      const endScreen = { x: changed.clientX, y: changed.clientY };
+      const startScreen = touchState.startScreen;
+      const dx = endScreen.x - startScreen.x;
+      const dy = endScreen.y - startScreen.y;
+      const vx = dx * 0.02; // scale to tune
+      const vy = dy * 0.02;
+      // create with mass from panel input
+      const m = parseFloat(document.getElementById('massa').value) || 10;
+      const pos = touchState.startWorld || screenToWorld(startScreen.x, startScreen.y);
+      bodies.push(makeBody(m, pos.x, pos.y, vx, vy));
+      recomputeColors();
+    }
+  }
+  // if pinch ended, just reset mode
+  touchState.mode = 'idle';
+  touchState.lastDist = 0;
+  touchState.pinchRefWorld = null;
+}, { passive:false });
+
+canvas.addEventListener('touchcancel', (ev) => { touchState.mode='idle'; });
+
+/* === Optional: tap with two fingers to reset camera to center === */
+canvas.addEventListener('dblclick', (ev) => { cam.x = 0; cam.y = 0; cam.scale = 1; });
+
+/* === Simple UX: long-press + move = pan instead of create
+   If the user touches and holds without dragging small amount, we switch to pan.
+   Implementation: on touchstart we scheduled a timer; if move beyond threshold before timer -> create; if hold -> pan.
+*/
+let holdTimer = null;
+const HOLD_MS = 220;
+canvas.addEventListener('touchstart', (ev) => {
+  if(ev.touches.length !== 1) return;
+  clearTimeout(holdTimer);
+  const t = ev.touches[0];
+  holdTimer = setTimeout(() => {
+    // switch to pan mode
+    touchState.mode = 'pan';
+    touchState.lastPan = { x: t.clientX, y: t.clientY };
+  }, HOLD_MS);
+}, { passive:false });
+
+canvas.addEventListener('touchmove', (ev) => {
+  // if in pan mode and single touch, perform pan
+  if(ev.touches.length === 1 && touchState.mode === 'pan'){
+    const t = ev.touches[0];
+    const dx = t.clientX - touchState.lastPan.x;
+    const dy = t.clientY - touchState.lastPan.y;
+    touchState.lastPan = { x: t.clientX, y: t.clientY };
+    cam.x -= dx / cam.scale;
+    cam.y -= dy / cam.scale;
+  } else {
+    // if moved while waiting for holdTimer and moved more than threshold, cancel hold (we want create)
+    if(ev.touches.length === 1 && touchState.mode === 'creating'){
+      const t = ev.touches[0];
+      const dx = t.clientX - (touchState.startScreen ? touchState.startScreen.x : t.clientX);
+      const dy = t.clientY - (touchState.startScreen ? touchState.startScreen.y : t.clientY);
+      if(Math.hypot(dx,dy) > 8){
+        clearTimeout(holdTimer);
+      }
+    }
+  }
+}, { passive:false });
+
+canvas.addEventListener('touchend', (ev) => { clearTimeout(holdTimer); }, { passive:false });
+
+/* === Utility: show basic debug on rotate (optional) === */
+window.addEventListener('orientationchange', () => { fitCanvas(); });
+
+/* === initialization color recompute === */
+recomputeColors();
+
 </script>
 </body>
 </html>
