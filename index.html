@@ -1,296 +1,196 @@
 <!doctype html>
 <html lang="pt-BR">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>3-Corpos — Verlet (Drawer Left)</title>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+<title>3-Corpos — Mobile (Verlet + Pinch Zoom)</title>
 <style>
-  :root{
-    --bg:#000;
-    --panel:#08121a;
-    --ui:#e6eef8;
-    --accent:#06b6d4;
-    --muted:rgba(230,238,248,0.07);
+  :root { --bg:#000; --panel:#0f1720; --accent:#0a84ff; --ui:#ddd; }
+  html,body{height:100%;margin:0;background:#000;color:var(--ui);font-family:sans-serif;overflow:hidden}
+  #canvas{touch-action:none;display:block;width:100%;height:100%;}
+  #panel{
+    position:fixed;top:0;right:0;width:260px;max-width:80%;height:100%;
+    background:var(--panel);color:var(--ui);padding:14px;box-sizing:border-box;
+    transform:translateX(100%);transition:transform .25s;
+    display:flex;flex-direction:column;gap:10px;z-index:10;overflow-y:auto;
   }
-  html,body{height:100%;margin:0;background:var(--bg);color:var(--ui);font-family:Inter,Roboto,system-ui,-apple-system,Segoe UI,Arial;}
-  #container{position:relative;height:100vh;width:100vw;overflow:hidden}
-  canvas{display:block;width:100%;height:100%;background:linear-gradient(180deg,#030308 0%,#000000 100%);touch-action:none}
-
-  /* Floating button (bottom-left) opens drawer */
-  #openBtn{
-    position:fixed;
-    left:16px;
-    bottom:16px;
-    z-index:60;
-    width:54px;
-    height:54px;
-    border-radius:50%;
-    background:linear-gradient(180deg,var(--accent),#0891b2);
-    border:none;
-    box-shadow:0 6px 18px rgba(0,0,0,0.45);
-    color:#022;
-    font-size:20px;
-    cursor:pointer;
-    display:flex;align-items:center;justify-content:center;
+  #panel.open{transform:translateX(0);}
+  #uiBtn{
+    position:fixed;top:10px;left:10px;z-index:11;
+    background:var(--accent);border:none;border-radius:6px;
+    color:#fff;font-size:16px;padding:7px 12px;
   }
-
-  /* Drawer / panel - slides from left */
-  #drawer{
-    position:fixed;
-    left:-320px;
-    top:0;
-    width:320px;
-    height:100vh;
-    background:var(--panel);
-    box-shadow:6px 0 40px rgba(0,0,0,0.6);
-    z-index:70;
-    transition:left 280ms cubic-bezier(.2,.9,.2,1);
-    padding:18px;
-    box-sizing:border-box;
+  input[type="number"],input[type="range"]{
+    width:100%;margin:4px 0 10px;height:28px;box-sizing:border-box;
   }
-  #drawer.open{ left:0; }
-
-  #drawer h3{ margin:0 0 10px 0; font-size:16px; color:var(--ui); }
-  .row{ margin:10px 0; display:flex; align-items:center; gap:8px; }
-  label.small{ font-size:13px; color:#9fb6c4; min-width:48px; display:inline-block;}
-  input[type=range]{ flex:1; }
-  input[type=number]{ width:100%; padding:8px; border-radius:8px; border:0; background:var(--muted); color:var(--ui); }
-
-  button.primary{
-    width:100%;
-    padding:10px 12px;
-    border-radius:8px;
-    background:var(--accent);
-    color:#022;
-    border:0;
-    font-weight:700;
-    cursor:pointer;
-  }
-  button.ghost{
-    width:100%;
-    padding:8px;
-    border-radius:8px;
-    background:transparent;
-    border:1px solid rgba(255,255,255,0.04);
-    color:var(--ui);
-    cursor:pointer;
-  }
-  .muted{ font-size:12px; color:#93bac6; }
-
-  /* close icon inside drawer */
-  #closeDrawer{ position:absolute; right:12px; top:12px; background:transparent; border:0; color:#9fb6c4; font-size:18px; cursor:pointer; }
-
-  /* footer info */
-  .footer{
-    position:fixed; right:12px; bottom:16px; z-index:60;
-    background:rgba(255,255,255,0.02); padding:8px 10px; border-radius:8px; font-size:12px; color:#9fb6c4;
-  }
-
-  /* preview arrow canvas overlay (optional) */
-  #overlay{ position:fixed; left:0; top:0; width:100%; height:100%; pointer-events:none; z-index:65; }
+  button{background:var(--accent);color:#fff;border:none;padding:8px;border-radius:6px;font-size:15px;}
 </style>
 </head>
 <body>
-  <div id="container">
-    <canvas id="sim" aria-label="Simulação 3 corpos"></canvas>
-
-    <button id="openBtn" title="Abrir painel">⚙</button>
-
-    <aside id="drawer" aria-hidden="true">
-      <button id="closeDrawer" aria-label="Fechar painel">✕</button>
-      <h3>Configuração — Simulação</h3>
-
-      <div class="row">
-        <label class="small">Vel (dt)</label>
-        <input id="dtRange" type="range" min="0.05" max="2.0" step="0.05" value="0.5">
-      </div>
-      <div class="row">
-        <span class="muted" id="dtVal">dt ×0.50</span>
-      </div>
-
-      <div class="row">
-        <label class="small">G</label>
-        <input id="gRange" type="range" min="0.01" max="1.0" step="0.01" value="0.2">
-      </div>
-      <div class="row">
-        <span class="muted" id="gVal">G = 0.20</span>
-      </div>
-
-      <hr style="border:none;border-top:1px solid rgba(255,255,255,0.04);margin:12px 0;">
-
-      <div style="margin-top:8px;">
-        <button id="addBtn" class="primary">Adicionar corpo aleatório</button>
-        <div style="height:8px"></div>
-        <button id="resetBtn" class="ghost">Resetar cena</button>
-      </div>
-
-      <div style="margin-top:12px;" class="muted">Toque/arraste para criar corpo: início = posição, arraste = velocidade. Segurar para pan, dois dedos para zoom.</div>
-    </aside>
-
-    <div class="footer">Rastro: ≤150 pontos • 450 px visíveis • Max corpos recomendado: 60</div>
-
-    <!-- overlay for preview arrow (optional) -->
-    <canvas id="overlay"></canvas>
-  </div>
+<button id="uiBtn">UI</button>
+<canvas id="canvas"></canvas>
+<div id="panel" aria-hidden="true">
+  <h2>Painel</h2>
+  <label>Massa: <input id="massa" type="number" value="20"></label>
+  <label>Pos X: <input id="posX" type="number" value="0"></label>
+  <label>Pos Y: <input id="posY" type="number" value="0"></label>
+  <label>Vel X: <input id="velX" type="number" value="0"></label>
+  <label>Vel Y: <input id="velY" type="number" value="0"></label>
+  <button id="addBtn">Adicionar corpo</button>
+  <button id="resetBtn">Resetar</button>
+  <label>G:
+    <input id="gRange" type="range" min="0.01" max="2" value="0.5" step="0.01">
+    <span id="gVal">G = 0.50</span>
+  </label>
+  <label>dt:
+    <input id="dtRange" type="range" min="0.01" max="2" value="0.4" step="0.01">
+    <span id="dtVal">dt = 0.40</span>
+  </label>
+</div>
 
 <script>
-/* ======================================================
-   Config & Canvas
-   ====================================================== */
-const canvas = document.getElementById('sim');
+/* === Config / Canvas / Camera (mobile-focused) === */
+const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d', { alpha: false });
-const overlay = document.getElementById('overlay');
-const octx = overlay.getContext('2d');
+let DPR = Math.max(1, window.devicePixelRatio || 1);
 
-function resizeAll(){
-  const dpr = window.devicePixelRatio || 1;
-  // main canvas
-  canvas.style.width = window.innerWidth + 'px';
-  canvas.style.height = window.innerHeight + 'px';
-  canvas.width = Math.floor(window.innerWidth * dpr);
-  canvas.height = Math.floor(window.innerHeight * dpr);
-  ctx.setTransform(dpr,0,0,dpr,0,0);
-
-  // overlay
-  overlay.style.width = window.innerWidth + 'px';
-  overlay.style.height = window.innerHeight + 'px';
-  overlay.width = Math.floor(window.innerWidth * dpr);
-  overlay.height = Math.floor(window.innerHeight * dpr);
-  octx.setTransform(dpr,0,0,dpr,0,0);
+function fitCanvas(){
+  DPR = Math.max(1, window.devicePixelRatio || 1);
+  canvas.style.width = innerWidth + 'px';
+  canvas.style.height = innerHeight + 'px';
+  canvas.width = Math.floor(innerWidth * DPR);
+  canvas.height = Math.floor(innerHeight * DPR);
+  ctx.setTransform(DPR,0,0,DPR,0,0);
 }
-window.addEventListener('resize', resizeAll);
-resizeAll();
+fitCanvas();
+addEventListener('resize', fitCanvas);
 
-/* ======================================================
-   Simulation state
-   ====================================================== */
-const bodies = []; // array of {m,x,y,vx,vy,trail}
-let G = parseFloat(document.getElementById('gRange').value) || 0.2;
-let dtMul = parseFloat(document.getElementById('dtRange').value) || 0.5; // user multiplier
-const BASE_STEP = 0.016; // base 60Hz step
-const MAX_SUBSTEPS = 12;
-const MAX_TRAIL_POINTS = 150;
-const TRAIL_MAX_PX = 450;
-const MAX_BODIES = 120; // hard cap to avoid O(n^2) blowup
-
-function makeBody(m,x,y,vx=0,vy=0){
-  return { m, x, y, vx, vy, trail: [[x,y]] };
+// world coordinates are in "pixels-like" units; camera keeps world position at screen center
+const cam = { x: 0, y: 0, scale: 1 }; // cam.x, cam.y = world coords at screen center
+function worldToScreen(p){
+  const cx = canvas.clientWidth/2, cy = canvas.clientHeight/2;
+  return { x: (p.x - cam.x)*cam.scale + cx, y: (p.y - cam.y)*cam.scale + cy };
+}
+function screenToWorld(sx, sy){
+  const cx = canvas.clientWidth/2, cy = canvas.clientHeight/2;
+  return { x: cam.x + (sx - cx)/cam.scale, y: cam.y + (sy - cy)/cam.scale };
 }
 
-/* seed initial 3-body centered roughly in world coords (screen space used for convenience) */
-function seedDefault(){
-  bodies.length = 0;
-  const cx = window.innerWidth/2, cy = window.innerHeight/2;
-  bodies.push(makeBody(200, cx, cy, 0, 0));
-  bodies.push(makeBody(20, cx-150, cy, 0, 1.2));
-  bodies.push(makeBody(20, cx+150, cy, 0, -1.2));
-}
-seedDefault();
+/* === Simulation state === */
+let G = parseFloat(document.getElementById('gRange').value); // gravity constant (visual)
+let dt = parseFloat(document.getElementById('dtRange').value); // timestep
+const MAX_TRAIL = 450;
 
-/* ======================================================
-   Physics: Velocity Verlet with substeps
-   - We'll compute per-frame a small number of substeps depending on dtMul
-   ====================================================== */
-function physicsStep(stepDt){
-  const n = bodies.length;
-  if(n === 0) return;
-
-  // arrays for accelerations (avoid re-alloc per pair by reusing)
-  const ax = new Array(n).fill(0);
-  const ay = new Array(n).fill(0);
-
-  // pairwise accel at current positions
-  for(let i=0;i<n;i++){
-    const Ai = bodies[i];
-    for(let j=i+1;j<n;j++){
-      const Aj = bodies[j];
-      const dx = Aj.x - Ai.x;
-      const dy = Aj.y - Ai.y;
-      const dist2 = dx*dx + dy*dy + 9.0; // softening: 3^2 to stabilize close passes
-      const inv = 1 / Math.sqrt(dist2);
-      const f = G * Ai.m * Aj.m * inv * inv; // F = G*m1*m2/r^2
-      const fx = f * dx * inv;
-      const fy = f * dy * inv;
-      ax[i] += fx / Ai.m; ay[i] += fy / Ai.m;
-      ax[j] -= fx / Aj.m; ay[j] -= fy / Aj.m;
-    }
-  }
-
-  // update positions using Verlet style
-  for(let i=0;i<n;i++){
-    const b = bodies[i];
-    b.x += b.vx * stepDt + 0.5 * ax[i] * stepDt * stepDt;
-    b.y += b.vy * stepDt + 0.5 * ay[i] * stepDt * stepDt;
-  }
-
-  // recompute accs at new positions
-  ax.fill(0); ay.fill(0);
-  for(let i=0;i<n;i++){
-    const Ai = bodies[i];
-    for(let j=i+1;j<n;j++){
-      const Aj = bodies[j];
-      const dx = Aj.x - Ai.x;
-      const dy = Aj.y - Ai.y;
-      const dist2 = dx*dx + dy*dy + 9.0;
-      const inv = 1 / Math.sqrt(dist2);
-      const f = G * Ai.m * Aj.m * inv * inv;
-      const fx = f * dx * inv;
-      const fy = f * dy * inv;
-      ax[i] += fx / Ai.m; ay[i] += fy / Ai.m;
-      ax[j] -= fx / Aj.m; ay[j] -= fy / Aj.m;
-    }
-  }
-
-  // finish velocity update and append trails (bounded)
-  for(let i=0;i<n;i++){
-    const b = bodies[i];
-    b.vx += 0.5 * ax[i] * stepDt;
-    b.vy += 0.5 * ay[i] * stepDt;
-
-    // push trail point (simple sampling) and cap points
-    const last = b.trail[b.trail.length-1];
-    if(!last || last[0] !== b.x || last[1] !== b.y){
-      b.trail.push([b.x, b.y]);
-      if(b.trail.length > MAX_TRAIL_POINTS) b.trail.shift();
-    }
-  }
+// body factory
+function makeBody(m, x, y, vx=0, vy=0){
+  return { m: m, x: x, y: y, vx: vx, vy: vy, rgb: [200,200,255], trail: [] };
 }
 
-/* ======================================================
-   Drawing: trails limited by px length + bodies
-   ====================================================== */
-function draw(){
-  ctx.fillStyle = '#000';
-  ctx.fillRect(0,0,window.innerWidth, window.innerHeight);
+// initial scene (world coords centered around 0)
+let bodies = [
+  makeBody(20, -150, 0, 0, 1.2),
+  makeBody(20, 150, 0, 0, -1.2),
+  makeBody(35, 0, 0, 0, 0)
+];
 
-  // trails (tracejado) — cyan-ish
-  ctx.lineWidth = 1.2;
-  ctx.setLineDash([6,6]);
-  ctx.strokeStyle = '#7dd3fc';
+// helper: recompute color mapping relative to all masses
+function recomputeColors(){
+  if(bodies.length === 0) return;
+  let minM = Infinity, maxM = -Infinity;
+  for(const b of bodies){ if(b.m < minM) minM = b.m; if(b.m > maxM) maxM = b.m; }
+  if(minM === maxM){ minM = minM * 0.5; maxM = maxM * 1.5; if(minM===maxM) { minM = 0; maxM = maxM||1; } }
 
   for(const b of bodies){
-    if(b.trail.length < 2) continue;
-
-    // accumulate from newest backwards until pixel limit
-    let acc = 0;
-    const drawPts = [];
-    for(let i = b.trail.length - 1; i > 0; i--){
-      const p1 = b.trail[i];
-      const p0 = b.trail[i-1];
-      const dx = p1[0] - p0[0], dy = p1[1] - p0[1];
-      const d = Math.hypot(dx,dy);
-      acc += d;
-      drawPts.unshift(p1);
-      if(acc >= TRAIL_MAX_PX) break;
+    let t = (b.m - minM) / (maxM - minM);
+    t = Math.max(0, Math.min(1, t));
+    // gradient: blue -> green -> yellow -> orange -> red
+    let r,g,bb;
+    if(t < 0.25){
+      let u = t/0.25;
+      r = lerp(40, 0, u); g = lerp(90,180,u); bb = lerp(255,200,u);
+    } else if(t < 0.5){
+      let u = (t-0.25)/0.25;
+      r = lerp(0,180,u); g = lerp(180,220,u); bb = lerp(200,80,u);
+    } else if(t < 0.75){
+      let u = (t-0.5)/0.25;
+      r = lerp(180,240,u); g = lerp(220,160,u); bb = lerp(80,40,u);
+    } else {
+      let u = (t-0.75)/0.25;
+      r = lerp(240,255,u); g = lerp(160,100,u); bb = lerp(40,20,u);
     }
-    // ensure include current last if not present
-    if(b.trail.length) drawPts.push(b.trail[b.trail.length-1]);
+    b.rgb = [Math.round(r), Math.round(g), Math.round(bb)];
+  }
+}
 
-    // draw polyline
+function lerp(a,b,t){ return a + (b-a)*t; }
+
+/* === Physics: Velocity Verlet === */
+// compute accelerations (returns arrays)
+function computeAccs(arr){
+  const n = arr.length;
+  const ax = new Array(n).fill(0);
+  const ay = new Array(n).fill(0);
+  const eps = 1.0; // softening to avoid huge forces in close approach
+  for(let i=0;i<n;i++){
+    for(let j=i+1;j<n;j++){
+      const A = arr[i], B = arr[j];
+      const dx = B.x - A.x;
+      const dy = B.y - A.y;
+      const dist2 = dx*dx + dy*dy + eps;
+      const dist = Math.sqrt(dist2);
+      const f = G * A.m * B.m / dist2;
+      const fx = f * dx / dist;
+      const fy = f * dy / dist;
+      ax[i] += fx / A.m; ay[i] += fy / A.m;
+      ax[j] -= fx / B.m; ay[j] -= fy / B.m;
+    }
+  }
+  return { ax, ay };
+}
+
+function stepVerlet(dtStep){
+  if(bodies.length === 0) return;
+  // 1) current acc
+  const { ax: ax0, ay: ay0 } = computeAccs(bodies);
+  // 2) update positions
+  for(let i=0;i<bodies.length;i++){
+    const b = bodies[i];
+    b.x += b.vx * dtStep + 0.5 * ax0[i] * dtStep * dtStep;
+    b.y += b.vy * dtStep + 0.5 * ay0[i] * dtStep * dtStep;
+  }
+  // 3) recompute acc
+  const { ax: ax1, ay: ay1 } = computeAccs(bodies);
+  // 4) update velocities & trails
+  for(let i=0;i<bodies.length;i++){
+    const b = bodies[i];
+    b.vx += 0.5 * (ax0[i] + ax1[i]) * dtStep;
+    b.vy += 0.5 * (ay0[i] + ay1[i]) * dtStep;
+    b.trail.push({ x: b.x, y: b.y });
+    if(b.trail.length > MAX_TRAIL) b.trail.shift();
+  }
+}
+
+/* === Rendering === */
+function draw(){
+  // clear
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0,0,canvas.clientWidth, canvas.clientHeight);
+
+  // recompute colors every frame (keeps relative mapping)
+  recomputeColors();
+
+  // draw trails (dashed style)
+  ctx.lineWidth = 1;
+  ctx.setLineDash([6,6]);
+  for(const b of bodies){
+    if(b.trail.length < 2) continue;
     ctx.beginPath();
-    for(let i=0;i<drawPts.length;i++){
-      const p = drawPts[i];
-      if(i===0) ctx.moveTo(p[0], p[1]); else ctx.lineTo(p[0], p[1]);
+    ctx.strokeStyle = `rgba(${b.rgb[0]},${b.rgb[1]},${b.rgb[2]},0.28)`;
+    for(let i=0;i<b.trail.length-1;i++){
+      const p1 = worldToScreen(b.trail[i]);
+      const p2 = worldToScreen(b.trail[i+1]);
+      ctx.moveTo(p1.x, p1.y);
+      ctx.lineTo(p2.x, p2.y);
     }
     ctx.stroke();
   }
@@ -298,231 +198,186 @@ function draw(){
 
   // draw bodies
   for(const b of bodies){
+    const screen = worldToScreen(b);
+    const radius = Math.max(4, Math.log(b.m + 1) * 4) * cam.scale; // radius scales a bit with zoom for visibility
     ctx.beginPath();
-    const r = Math.max(3, Math.log2(b.m + 1) * 3);
-    ctx.arc(b.x, b.y, r, 0, Math.PI*2);
-    ctx.fillStyle = rgbForMass(b.m);
+    ctx.arc(screen.x, screen.y, Math.max(3, radius), 0, Math.PI*2);
+    ctx.fillStyle = `rgb(${b.rgb[0]},${b.rgb[1]},${b.rgb[2]})`;
     ctx.fill();
     ctx.lineWidth = 1;
-    ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+    ctx.strokeStyle = `rgba(${b.rgb[0]},${b.rgb[1]},${b.rgb[2]},0.9)`;
     ctx.stroke();
   }
 }
 
-/* simple color picker (consistent with earlier gradient) */
-function rgbForMass(m){
-  const [r,g,b] = massToRGB(m);
-  return `rgb(${r},${g},${b})`;
-}
-function massToRGB(m){
-  const minM=5, maxM=60;
-  let t = (m - minM) / (maxM - minM);
-  t = Math.max(0, Math.min(1, t));
-  if(t < 0.5){
-    const u = t/0.5;
-    const r = Math.round(0 + (0-0)*u);
-    const g = Math.round(120 + (200-120)*u);
-    const b = Math.round(255 + (80-255)*u);
-    return [r,g,b];
-  } else {
-    const u = (t-0.5)/0.5;
-    const r = Math.round(0 + (255-0)*u);
-    const g = Math.round(200 + (120-200)*u);
-    const b = Math.round(80 + (30-80)*u);
-    return [r,g,b];
-  }
-}
-
-/* ======================================================
-   Main RAF loop with adaptive substepping
-   ====================================================== */
+/* === Main loop === */
 let last = performance.now();
-function frame(now){
-  const elapsed = (now - last) / 1000;
-  last = now;
-  // clamp (handle tab switch)
-  const clamped = Math.min(0.05, elapsed);
-
-  // compute desired simulation time this frame
-  const simTime = clamped * dtMul; // scale real time by dtMul slider
-  // pick number of substeps to keep each step <= BASE_STEP * 1.2 (approx)
-  let steps = Math.ceil(simTime / (BASE_STEP * 1.0));
-  steps = Math.max(1, Math.min(MAX_SUBSTEPS, steps));
-  const stepSize = simTime / steps;
-
-  // run physics steps
-  for(let i=0;i<steps;i++) physicsStep(stepSize);
-
-  // draw
+function loop(now){
+  stepVerlet(dt);
   draw();
-  requestAnimationFrame(frame);
+  requestAnimationFrame(loop);
 }
-requestAnimationFrame(frame);
+requestAnimationFrame(loop);
 
-/* ======================================================
-   Input: pointer for create / pan / pinch (pointer events)
-   - single pointer: tap & drag to create body (release spawns)
-   - hold + drag: pan
-   - two pointers: pinch to zoom
-   ====================================================== */
-let pointers = new Map();
-let create = { active:false, id:null, startScreen:null, startWorld:null, held:false, holdTimer:null, lastMove:null };
-
-let pinchRef = null;
-
-canvas.addEventListener('pointerdown', (ev)=>{
-  canvas.setPointerCapture(ev.pointerId);
-  pointers.set(ev.pointerId, { id:ev.pointerId, x:ev.clientX, y:ev.clientY, type:ev.pointerType });
-
-  if(pointers.size === 1){
-    // start potential create
-    create.active = true;
-    create.id = ev.pointerId;
-    create.startScreen = { x: ev.clientX, y: ev.clientY };
-    create.startWorld = { x: ev.clientX, y: ev.clientY }; // world==screen space here
-    create.held = false;
-    create.lastMove = null;
-    create.holdTimer = setTimeout(()=>{ create.held = true; }, 220);
-  } else if(pointers.size === 2){
-    // pinch start
-    const arr = Array.from(pointers.values());
-    const a = arr[0], b = arr[1];
-    pinchRef = {
-      dist: Math.hypot(a.x - b.x, a.y - b.y),
-      center: { x: (a.x + b.x)/2, y: (a.y + b.y)/2 },
-      cam: { x: 0, y: 0, scale: cam.scale } // cam.x,y are zero in screen-coords design
-    };
-  }
+/* === UI: panel actions === */
+const uiBtn = document.getElementById('uiBtn');
+const panel = document.getElementById('panel');
+uiBtn.addEventListener('click', () => {
+  panel.classList.toggle('open');
+  panel.setAttribute('aria-hidden', panel.classList.contains('open') ? 'false' : 'true');
 });
 
-canvas.addEventListener('pointermove', (ev)=>{
-  if(!pointers.has(ev.pointerId)) return;
-  pointers.set(ev.pointerId, { id:ev.pointerId, x:ev.clientX, y:ev.clientY, type:ev.pointerType });
+document.getElementById('addBtn').addEventListener('click', () => {
+  const m = parseFloat(document.getElementById('massa').value) || 10;
+  const x = parseFloat(document.getElementById('posX').value) || 0;
+  const y = parseFloat(document.getElementById('posY').value) || 0;
+  const vx = parseFloat(document.getElementById('velX').value) || 0;
+  const vy = parseFloat(document.getElementById('velY').value) || 0;
+  bodies.push(makeBody(m, x, y, vx, vy));
+  recomputeColors();
+});
 
-  if(pointers.size === 2 && pinchRef){
-    const arr = Array.from(pointers.values());
-    const a = arr[0], b = arr[1];
-    const newDist = Math.hypot(a.x - b.x, a.y - b.y);
-    const factor = newDist / pinchRef.dist;
-    // adjust cam.scale but clamp
-    cam.scale = Math.max(0.08, Math.min(8, pinchRef.cam.scale * factor));
-    return;
+document.getElementById('resetBtn').addEventListener('click', () => {
+  bodies = [
+    makeBody(20, -150, 0, 0, 1.2),
+    makeBody(20, 150, 0, 0, -1.2),
+    makeBody(35, 0, 0, 0, 0)
+  ];
+  cam.x = 0; cam.y = 0; cam.scale = 1;
+  recomputeColors();
+});
+
+document.getElementById('gRange').addEventListener('input', (e) => {
+  G = parseFloat(e.target.value);
+  document.getElementById('gVal').textContent = `G = ${G.toFixed(2)}`;
+});
+document.getElementById('dtRange').addEventListener('input', (e) => {
+  dt = parseFloat(e.target.value);
+  document.getElementById('dtVal').textContent = `dt = ${dt.toFixed(2)}`;
+});
+
+/* === Touch handling (mobile only) === */
+let ongoingTouches = [];
+let touchState = {
+  mode: 'idle',
+  startWorld: null,
+  startScreen: null,
+  lastPan: null,
+  lastDist: 0,
+  lastCenter: null
+};
+
+function distTouches(a,b){ const dx=a.clientX-b.clientX, dy=a.clientY-b.clientY; return Math.hypot(dx,dy); }
+function centerTouches(a,b){ return { x:(a.clientX+b.clientX)/2, y:(a.clientY+b.clientY)/2 }; }
+
+canvas.addEventListener('touchstart', (ev) => {
+  ev.preventDefault();
+  const touches = ev.touches;
+  if(touches.length === 1){
+    touchState.mode = 'creating';
+    const t = touches[0];
+    touchState.startScreen = { x: t.clientX, y: t.clientY };
+    touchState.startWorld = screenToWorld(t.clientX, t.clientY);
+    touchState.lastPan = { x: t.clientX, y: t.clientY };
+  } else if(touches.length === 2){
+    touchState.mode = 'pinch';
+    const a = touches[0], b = touches[1];
+    touchState.lastDist = distTouches(a,b);
+    touchState.lastCenter = centerTouches(a,b);
+    touchState.pinchRefWorld = screenToWorld(touchState.lastCenter.x, touchState.lastCenter.y);
+    touchState.startScale = cam.scale;
   }
+}, { passive:false });
 
-  // single pointer: if held -> pan, else update preview
-  if(create.active && ev.pointerId === create.id){
-    if(create.held){
-      const last = create.lastMove || create.startScreen;
-      const dx = ev.clientX - last.x;
-      const dy = ev.clientY - last.y;
-      // pan (camera implemented as offset; here worlds are screen coords so move all bodies)
-      for(const b of bodies){ b.x += dx; b.y += dy; }
-      create.lastMove = { x: ev.clientX, y: ev.clientY };
-    } else {
-      // preview velocity stored in create.previewV (not drawn on main canvas here)
-      // we keep simple: no visual preview except overlay optional
+canvas.addEventListener('touchmove', (ev) => {
+  ev.preventDefault();
+  const touches = ev.touches;
+  if(touches.length === 1 && touchState.mode === 'creating'){
+    touchState.lastPan = { x: touches[0].clientX, y: touches[0].clientY };
+  } else if(touches.length === 1 && touchState.mode === 'pan'){
+    const t = touches[0];
+    const dx = t.clientX - touchState.lastPan.x;
+    const dy = t.clientY - touchState.lastPan.y;
+    touchState.lastPan = { x: t.clientX, y: t.clientY };
+    cam.x -= dx / cam.scale;
+    cam.y -= dy / cam.scale;
+  } else if(touches.length === 2 && touchState.mode === 'pinch'){
+    const a = touches[0], b = touches[1];
+    const newDist = distTouches(a,b);
+    const center = centerTouches(a,b);
+    const factor = newDist / (touchState.lastDist || newDist);
+    const newScale = Math.max(0.08, Math.min(8, touchState.startScale * factor));
+    const screenCenter = { x: center.x, y: center.y };
+    const worldAtScreenBefore = touchState.pinchRefWorld;
+    cam.scale = newScale;
+    cam.x = worldAtScreenBefore.x - (screenCenter.x - canvas.clientWidth/2) / cam.scale;
+    cam.y = worldAtScreenBefore.y - (screenCenter.y - canvas.clientHeight/2) / cam.scale;
+  }
+}, { passive:false });
+
+canvas.addEventListener('touchend', (ev) => {
+  ev.preventDefault();
+  if(touchState.mode === 'creating'){
+    const changed = ev.changedTouches[0];
+    if(changed){
+      const endScreen = { x: changed.clientX, y: changed.clientY };
+      const startScreen = touchState.startScreen;
+      const dx = endScreen.x - startScreen.x;
+      const dy = endScreen.y - startScreen.y;
+      const vx = dx * 0.02;
+      const vy = dy * 0.02;
+      const m = parseFloat(document.getElementById('massa').value) || 10;
+      const pos = touchState.startWorld || screenToWorld(startScreen.x, startScreen.y);
+      bodies.push(makeBody(m, pos.x, pos.y, vx, vy));
+      recomputeColors();
     }
   }
-});
+  touchState.mode = 'idle';
+  touchState.lastDist = 0;
+  touchState.pinchRefWorld = null;
+}, { passive:false });
 
-canvas.addEventListener('pointerup', (ev)=>{
-  if(!pointers.has(ev.pointerId)) return;
-  pointers.delete(ev.pointerId);
-  canvas.releasePointerCapture(ev.pointerId);
+canvas.addEventListener('touchcancel', (ev) => { touchState.mode='idle'; });
 
-  if(create.active && ev.pointerId === create.id){
-    clearTimeout(create.holdTimer);
-    if(!create.held){
-      // create body with velocity defined by drag vector
-      const end = { x: ev.clientX, y: ev.clientY };
-      const vx = (end.x - create.startScreen.x) * 0.04;
-      const vy = (end.y - create.startScreen.y) * 0.04;
-      if(bodies.length < MAX_BODIES){
-        const mass = Math.min(60, 5 + Math.random()*40);
-        bodies.push(makeBody(mass, create.startWorld.x, create.startWorld.y, vx, vy));
+canvas.addEventListener('dblclick', (ev) => { cam.x = 0; cam.y = 0; cam.scale = 1; });
+
+let holdTimer = null;
+const HOLD_MS = 220;
+canvas.addEventListener('touchstart', (ev) => {
+  if(ev.touches.length !== 1) return;
+  clearTimeout(holdTimer);
+  const t = ev.touches[0];
+  holdTimer = setTimeout(() => {
+    touchState.mode = 'pan';
+    touchState.lastPan = { x: t.clientX, y: t.clientY };
+  }, HOLD_MS);
+}, { passive:false });
+
+canvas.addEventListener('touchmove', (ev) => {
+  if(ev.touches.length === 1 && touchState.mode === 'pan'){
+    const t = ev.touches[0];
+    const dx = t.clientX - touchState.lastPan.x;
+    const dy = t.clientY - touchState.lastPan.y;
+    touchState.lastPan = { x: t.clientX, y: t.clientY };
+    cam.x -= dx / cam.scale;
+    cam.y -= dy / cam.scale;
+  } else {
+    if(ev.touches.length === 1 && touchState.mode === 'creating'){
+      const t = ev.touches[0];
+      const dx = t.clientX - (touchState.startScreen ? touchState.startScreen.x : t.clientX);
+      const dy = t.clientY - (touchState.startScreen ? touchState.startScreen.y : t.clientY);
+      if(Math.hypot(dx,dy) > 8){
+        clearTimeout(holdTimer);
       }
     }
-    // reset create
-    create.active = false;
-    create.id = null;
-    create.startScreen = null;
-    create.startWorld = null;
-    create.held = false;
-    create.lastMove = null;
   }
+}, { passive:false });
 
-  if(pointers.size < 2) pinchRef = null;
-});
+canvas.addEventListener('touchend', (ev) => { clearTimeout(holdTimer); }, { passive:false });
 
-/* wheel zoom for desktop */
-canvas.addEventListener('wheel', (ev)=>{
-  ev.preventDefault();
-  const factor = Math.exp(-ev.deltaY * 0.0015);
-  cam.scale = Math.max(0.08, Math.min(8, cam.scale * factor));
-},{passive:false});
+window.addEventListener('orientationchange', () => { fitCanvas(); });
 
-/* prevent accidental text selection while dragging */
-canvas.addEventListener('pointermove', (ev)=>{ if(create.active) ev.preventDefault(); });
-
-/* ======================================================
-   UI bindings
-   ====================================================== */
-const dtRange = document.getElementById('dtRange');
-const gRange = document.getElementById('gRange');
-const dtVal = document.getElementById('dtVal');
-const gVal = document.getElementById('gVal');
-const resetBtn = document.getElementById('resetBtn');
-const addBtn = document.getElementById('addBtn');
-const openBtn = document.getElementById('openBtn');
-const drawer = document.getElementById('drawer');
-const closeDrawer = document.getElementById('closeDrawer');
-
-dtRange.value = dtMul;
-dtVal.textContent = `dt ×${dtMul.toFixed(2)}`;
-gVal.textContent = `G = ${G.toFixed(2)}`;
-
-dtRange.addEventListener('input', (e)=>{
-  dtMul = parseFloat(e.target.value);
-  dtVal.textContent = `dt ×${dtMul.toFixed(2)}`;
-});
-gRange.addEventListener('input', (e)=>{
-  G = parseFloat(e.target.value);
-  gVal.textContent = `G = ${G.toFixed(2)}`;
-});
-
-resetBtn.addEventListener('click', ()=>{
-  seedDefault();
-});
-addBtn.addEventListener('click', ()=>{
-  if(bodies.length >= MAX_BODIES) return;
-  const sx = window.innerWidth/2 + (Math.random()-0.5)*300;
-  const sy = window.innerHeight/2 + (Math.random()-0.5)*200;
-  const mass = 8 + Math.random()*40;
-  const vx = (Math.random()-0.5)*1.4;
-  const vy = (Math.random()-0.5)*1.4;
-  bodies.push(makeBody(mass, sx, sy, vx, vy));
-});
-
-openBtn.addEventListener('click', ()=>{
-  drawer.classList.add('open');
-  drawer.setAttribute('aria-hidden', 'false');
-});
-closeDrawer.addEventListener('click', ()=>{
-  drawer.classList.remove('open');
-  drawer.setAttribute('aria-hidden', 'true');
-});
-
-/* ======================================================
-   helpers & init
-   ====================================================== */
-/* mass color helper used by draw: massToRGB defined above reused */
-function corPorMassaRGB(m){ return massToRGB(m); } // backwards compat
-
-// initialize UI & ensure resize applied
-dtRange.dispatchEvent(new Event('input'));
-gRange.dispatchEvent(new Event('input'));
-resizeAll();
-
+recomputeColors();
 </script>
 </body>
 </html>
