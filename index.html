@@ -6,47 +6,67 @@
 <title>3-Corpos — Mobile (Verlet + Pinch Zoom)</title>
 <style>
   :root { --bg:#000; --panel:#0f1720; --accent:#0a84ff; --ui:#ddd; }
-  html,body{height:100%;margin:0;background:#000;color:var(--ui);font-family:sans-serif;overflow:hidden}
-  #canvas{touch-action:none;display:block;width:100%;height:100%;}
-  #panel{
-    position:fixed;top:0;right:0;width:260px;max-width:80%;height:100%;
-    background:var(--panel);color:var(--ui);padding:14px;box-sizing:border-box;
-    transform:translateX(100%);transition:transform .25s;
-    display:flex;flex-direction:column;gap:10px;z-index:10;overflow-y:auto;
-  }
-  #panel.open{transform:translateX(0);}
+  html,body{height:100%;margin:0;background:var(--bg);color:var(--ui);-webkit-tap-highlight-color:transparent; touch-action: none;}
+  #canvas{display:block;width:100vw;height:100vh;}
   #uiBtn{
-    position:fixed;top:10px;left:10px;z-index:11;
-    background:var(--accent);border:none;border-radius:6px;
-    color:#fff;font-size:16px;padding:7px 12px;
+    position:fixed; left:12px; top:12px; z-index:20;
+    background:rgba(255,255,255,0.06); border:0; color:var(--ui); padding:8px 10px; border-radius:8px; font-weight:600;
   }
-  input[type="number"],input[type="range"]{
-    width:100%;margin:4px 0 10px;height:28px;box-sizing:border-box;
+  #panel{
+    position:fixed; right:-320px; top:0; height:100vh; width:300px; background:var(--panel); padding:16px; box-sizing:border-box;
+    transition:right .28s ease; z-index:21; color:var(--ui); font-family:system-ui,Arial;
   }
-  button{background:var(--accent);color:#fff;border:none;padding:8px;border-radius:6px;font-size:15px;}
+  #panel.open{ right:0; }
+  label{display:block;margin-top:10px;font-size:13px;color:#cbd5e1;}
+  input[type="number"], input[type="range"]{ width:100%; margin-top:6px; padding:8px; border-radius:6px; border:0; background:#0b1220; color:var(--ui); }
+  button{ margin-top:12px; width:100%; padding:10px; border-radius:8px; border:0; background:var(--accent); color:white; font-weight:700; }
+  .small{ font-size:12px; color:#94a3b8; margin-top:6px; }
+  .footer { position:fixed; right:12px; bottom:12px; z-index:20; color:#9ca3af; background:rgba(255,255,255,0.03); padding:6px 8px; border-radius:6px; font-size:12px; }
+  #fps { position:fixed; left:12px; bottom:50px; color:#9ca3af; font-size:12px; z-index:20; background:rgba(0,0,0,0.3); padding:4px 6px; border-radius:4px; }
 </style>
 </head>
 <body>
-<button id="uiBtn">UI</button>
 <canvas id="canvas"></canvas>
-<div id="panel" aria-hidden="true">
-  <h2>Painel</h2>
-  <label>Massa: <input id="massa" type="number" value="20"></label>
-  <label>Pos X: <input id="posX" type="number" value="0"></label>
-  <label>Pos Y: <input id="posY" type="number" value="0"></label>
-  <label>Vel X: <input id="velX" type="number" value="0"></label>
-  <label>Vel Y: <input id="velY" type="number" value="0"></label>
+
+<button id="uiBtn" aria-label="Abrir painel">⚙ Configurar</button>
+
+<aside id="panel" aria-hidden="true">
+  <h3 style="margin:0 0 6px 0;">Criar corpo</h3>
+
+  <label for="massa">Massa</label>
+  <input id="massa" type="number" value="20" step="1" min="0.1">
+
+  <label for="posX">Pos X (mundo)</label>
+  <input id="posX" type="number" value="-150" step="1">
+
+  <label for="posY">Pos Y (mundo)</label>
+  <input id="posY" type="number" value="0" step="1">
+
+  <label for="velX">Vel X</label>
+  <input id="velX" type="number" value="0" step="0.1">
+
+  <label for="velY">Vel Y</label>
+  <input id="velY" type="number" value="1.2" step="0.1">
+
   <button id="addBtn">Adicionar corpo</button>
-  <button id="resetBtn">Resetar</button>
-  <label>G:
-    <input id="gRange" type="range" min="0.01" max="2" value="0.5" step="0.01">
-    <span id="gVal">G = 0.50</span>
-  </label>
-  <label>dt:
-    <input id="dtRange" type="range" min="0.01" max="2" value="0.4" step="0.01">
-    <span id="dtVal">dt = 0.40</span>
-  </label>
-</div>
+
+  <div class="small">Toque e arraste na tela para criar um corpo: início = posição, arraste = velocidade.</div>
+
+  <hr style="margin:12px 0; border:none; border-top:1px solid rgba(255,255,255,0.04)">
+
+  <label for="gRange">Constante G</label>
+  <input id="gRange" type="range" min="0.01" max="10" step="0.01" value="0.2">
+  <div id="gVal" class="small">G = 0.20</div>
+
+  <label for="dtRange">Time-step (dt)</label>
+  <input id="dtRange" type="range" min="0.1" max="15" step="0.1" value="0.9">
+  <div id="dtVal" class="small">dt = 0.90</div>
+
+  <button id="resetBtn" style="background:#ef4444;">Resetar cena</button>
+</aside>
+
+<div class="footer">Rastro ≤ 450 pontos • Pinch-to-zoom & pan (mobile)</div>
+<div id="fps">FPS: 0</div>
 
 <script>
 /* === Config / Canvas / Camera (mobile-focused) === */
@@ -65,319 +85,239 @@ function fitCanvas(){
 fitCanvas();
 addEventListener('resize', fitCanvas);
 
-// world coordinates are in "pixels-like" units; camera keeps world position at screen center
-const cam = { x: 0, y: 0, scale: 1 }; // cam.x, cam.y = world coords at screen center
-function worldToScreen(p){
-  const cx = canvas.clientWidth/2, cy = canvas.clientHeight/2;
-  return { x: (p.x - cam.x)*cam.scale + cx, y: (p.y - cam.y)*cam.scale + cy };
-}
-function screenToWorld(sx, sy){
-  const cx = canvas.clientWidth/2, cy = canvas.clientHeight/2;
-  return { x: cam.x + (sx - cx)/cam.scale, y: cam.y + (sy - cy)/cam.scale };
-}
+const cam = { x: 0, y: 0, scale: 1 };
+function worldToScreen(p){ const cx = canvas.clientWidth/2, cy = canvas.clientHeight/2; return { x: (p.x - cam.x)*cam.scale + cx, y: (p.y - cam.y)*cam.scale + cy }; }
+function screenToWorld(sx, sy){ const cx = canvas.clientWidth/2, cy = canvas.clientHeight/2; return { x: cam.x + (sx - cx)/cam.scale, y: cam.y + (sy - cy)/cam.scale }; }
 
 /* === Simulation state === */
-let G = parseFloat(document.getElementById('gRange').value); // gravity constant (visual)
-let dt = parseFloat(document.getElementById('dtRange').value); // timestep
+let G = parseFloat(document.getElementById('gRange').value);
+let dt = parseFloat(document.getElementById('dtRange').value);
 const MAX_TRAIL = 450;
 
-// body factory
-function makeBody(m, x, y, vx=0, vy=0){
-  return { m: m, x: x, y: y, vx: vx, vy: vy, rgb: [200,200,255], trail: [] };
-}
+function makeBody(m, x, y, vx=0, vy=0){ return { m, x, y, vx, vy, rgb:[200,200,255], trail:[] }; }
 
-// initial scene (world coords centered around 0)
 let bodies = [
   makeBody(20, -150, 0, 0, 1.2),
   makeBody(20, 150, 0, 0, -1.2),
   makeBody(35, 0, 0, 0, 0)
 ];
 
-// helper: recompute color mapping relative to all masses
-function recomputeColors(){
-  if(bodies.length === 0) return;
-  let minM = Infinity, maxM = -Infinity;
-  for(const b of bodies){ if(b.m < minM) minM = b.m; if(b.m > maxM) maxM = b.m; }
-  if(minM === maxM){ minM = minM * 0.5; maxM = maxM * 1.5; if(minM===maxM) { minM = 0; maxM = maxM||1; } }
+function lerp(a,b,t){ return a + (b-a)*t; }
 
+function recomputeColors(){
+  if(bodies.length===0) return;
+  let minM = Infinity, maxM=-Infinity;
+  for(const b of bodies){ if(b.m<minM) minM=b.m; if(b.m>maxM) maxM=b.m; }
+  if(minM===maxM){ minM*=0.5; maxM*=1.5; if(minM===maxM){ minM=0; maxM=maxM||1;} }
   for(const b of bodies){
-    let t = (b.m - minM) / (maxM - minM);
-    t = Math.max(0, Math.min(1, t));
-    // gradient: blue -> green -> yellow -> orange -> red
+    let t = (b.m - minM)/(maxM - minM);
+    t=Math.max(0,Math.min(1,t));
     let r,g,bb;
-    if(t < 0.25){
-      let u = t/0.25;
-      r = lerp(40, 0, u); g = lerp(90,180,u); bb = lerp(255,200,u);
-    } else if(t < 0.5){
-      let u = (t-0.25)/0.25;
-      r = lerp(0,180,u); g = lerp(180,220,u); bb = lerp(200,80,u);
-    } else if(t < 0.75){
-      let u = (t-0.5)/0.25;
-      r = lerp(180,240,u); g = lerp(220,160,u); bb = lerp(80,40,u);
-    } else {
-      let u = (t-0.75)/0.25;
-      r = lerp(240,255,u); g = lerp(160,100,u); bb = lerp(40,20,u);
-    }
-    b.rgb = [Math.round(r), Math.round(g), Math.round(bb)];
+    if(t<0.25){ let u=t/0.25; r=lerp(40,0,u); g=lerp(90,180,u); bb=lerp(255,200,u);}
+    else if(t<0.5){ let u=(t-0.25)/0.25; r=lerp(0,180,u); g=lerp(180,220,u); bb=lerp(200,80,u);}
+    else if(t<0.75){ let u=(t-0.5)/0.25; r=lerp(180,240,u); g=lerp(220,160,u); bb=lerp(80,40,u);}
+    else{ let u=(t-0.75)/0.25; r=lerp(240,255,u); g=lerp(160,100,u); bb=lerp(40,20,u);}
+    b.rgb=[Math.round(r),Math.round(g),Math.round(bb)];
   }
 }
 
-function lerp(a,b,t){ return a + (b-a)*t; }
-
 /* === Physics: Velocity Verlet === */
-// compute accelerations (returns arrays)
 function computeAccs(arr){
-  const n = arr.length;
-  const ax = new Array(n).fill(0);
-  const ay = new Array(n).fill(0);
-  const eps = 1.0; // softening to avoid huge forces in close approach
+  const n=arr.length, ax=new Array(n).fill(0), ay=new Array(n).fill(0), eps=1.0;
   for(let i=0;i<n;i++){
     for(let j=i+1;j<n;j++){
-      const A = arr[i], B = arr[j];
-      const dx = B.x - A.x;
-      const dy = B.y - A.y;
-      const dist2 = dx*dx + dy*dy + eps;
-      const dist = Math.sqrt(dist2);
-      const f = G * A.m * B.m / dist2;
-      const fx = f * dx / dist;
-      const fy = f * dy / dist;
-      ax[i] += fx / A.m; ay[i] += fy / A.m;
-      ax[j] -= fx / B.m; ay[j] -= fy / B.m;
+      const A=arr[i], B=arr[j];
+      const dx=B.x-A.x, dy=B.y-A.y, dist2=dx*dx+dy*dy+eps, dist=Math.sqrt(dist2);
+      const f=G*A.m*B.m/dist2;
+      const fx=f*dx/dist, fy=f*dy/dist;
+      ax[i]+=fx/A.m; ay[i]+=fy/A.m;
+      ax[j]-=fx/B.m; ay[j]-=fy/B.m;
     }
   }
-  return { ax, ay };
+  return {ax, ay};
 }
 
 function stepVerlet(dtStep){
-  if(bodies.length === 0) return;
-  // 1) current acc
-  const { ax: ax0, ay: ay0 } = computeAccs(bodies);
-  // 2) update positions
+  if(bodies.length===0) return;
+  const {ax:ax0, ay:ay0} = computeAccs(bodies);
   for(let i=0;i<bodies.length;i++){
-    const b = bodies[i];
-    b.x += b.vx * dtStep + 0.5 * ax0[i] * dtStep * dtStep;
-    b.y += b.vy * dtStep + 0.5 * ay0[i] * dtStep * dtStep;
+    const b=bodies[i];
+    b.x+=b.vx*dtStep + 0.5*ax0[i]*dtStep*dtStep;
+    b.y+=b.vy*dtStep + 0.5*ay0[i]*dtStep*dtStep;
   }
-  // 3) recompute acc
-  const { ax: ax1, ay: ay1 } = computeAccs(bodies);
-  // 4) update velocities & trails
+  const {ax:ax1, ay:ay1}=computeAccs(bodies);
   for(let i=0;i<bodies.length;i++){
-    const b = bodies[i];
-    b.vx += 0.5 * (ax0[i] + ax1[i]) * dtStep;
-    b.vy += 0.5 * (ay0[i] + ay1[i]) * dtStep;
-    b.trail.push({ x: b.x, y: b.y });
-    if(b.trail.length > MAX_TRAIL) b.trail.shift();
+    const b=bodies[i];
+    b.vx+=0.5*(ax0[i]+ax1[i])*dtStep;
+    b.vy+=0.5*(ay0[i]+ay1[i])*dtStep;
+    b.trail.push({x:b.x,y:b.y});
+    if(b.trail.length>MAX_TRAIL) b.trail.shift();
   }
 }
 
 /* === Rendering === */
 function draw(){
-  // clear
-  ctx.fillStyle = '#000';
-  ctx.fillRect(0,0,canvas.clientWidth, canvas.clientHeight);
-
-  // recompute colors every frame (keeps relative mapping)
+  ctx.fillStyle='#000';
+  ctx.fillRect(0,0,canvas.clientWidth,canvas.clientHeight);
   recomputeColors();
 
-  // draw trails (dashed style)
-  ctx.lineWidth = 1;
+  ctx.lineWidth=1;
   ctx.setLineDash([6,6]);
   for(const b of bodies){
-    if(b.trail.length < 2) continue;
+    if(b.trail.length<2) continue;
     ctx.beginPath();
-    ctx.strokeStyle = `rgba(${b.rgb[0]},${b.rgb[1]},${b.rgb[2]},0.28)`;
+    ctx.strokeStyle=`rgba(${b.rgb[0]},${b.rgb[1]},${b.rgb[2]},0.28)`;
     for(let i=0;i<b.trail.length-1;i++){
-      const p1 = worldToScreen(b.trail[i]);
-      const p2 = worldToScreen(b.trail[i+1]);
-      ctx.moveTo(p1.x, p1.y);
-      ctx.lineTo(p2.x, p2.y);
+      const p1=worldToScreen(b.trail[i]);
+      const p2=worldToScreen(b.trail[i+1]);
+      ctx.moveTo(p1.x,p1.y); ctx.lineTo(p2.x,p2.y);
     }
     ctx.stroke();
   }
   ctx.setLineDash([]);
 
-  // draw bodies
   for(const b of bodies){
-    const screen = worldToScreen(b);
-    const radius = Math.max(4, Math.log(b.m + 1) * 4) * cam.scale; // radius scales a bit with zoom for visibility
+    const screen=worldToScreen(b);
+    const radius=Math.max(4,Math.log(b.m+1)*4)*cam.scale;
     ctx.beginPath();
-    ctx.arc(screen.x, screen.y, Math.max(3, radius), 0, Math.PI*2);
-    ctx.fillStyle = `rgb(${b.rgb[0]},${b.rgb[1]},${b.rgb[2]})`;
+    ctx.arc(screen.x,screen.y,Math.max(3,radius),0,Math.PI*2);
+    ctx.fillStyle=`rgb(${b.rgb[0]},${b.rgb[1]},${b.rgb[2]})`;
     ctx.fill();
-    ctx.lineWidth = 1;
-    ctx.strokeStyle = `rgba(${b.rgb[0]},${b.rgb[1]},${b.rgb[2]},0.9)`;
+    ctx.lineWidth=1;
+    ctx.strokeStyle=`rgba(${b.rgb[0]},${b.rgb[1]},${b.rgb[2]},0.9)`;
     ctx.stroke();
   }
 }
 
-/* === Main loop === */
-let last = performance.now();
+/* === Main loop + FPS === */
+let lastTime=performance.now(), fpsCounter=0, fpsTime=0, fpsDisplay=document.getElementById('fps');
 function loop(now){
+  const delta=(now-lastTime)/1000;
+  lastTime=now;
   stepVerlet(dt);
   draw();
+  fpsTime+=delta; fpsCounter++;
+  if(fpsTime>=0.5){ fpsDisplay.textContent=`FPS: ${Math.round(fpsCounter/fpsTime)}`; fpsTime=0; fpsCounter=0; }
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
 
-/* === UI: panel actions === */
-const uiBtn = document.getElementById('uiBtn');
-const panel = document.getElementById('panel');
-uiBtn.addEventListener('click', () => {
-  panel.classList.toggle('open');
-  panel.setAttribute('aria-hidden', panel.classList.contains('open') ? 'false' : 'true');
-});
+/* === UI actions === */
+const uiBtn=document.getElementById('uiBtn'), panel=document.getElementById('panel');
+uiBtn.addEventListener('click', ()=>{ panel.classList.toggle('open'); panel.setAttribute('aria-hidden', panel.classList.contains('open')?'false':'true'); });
 
-document.getElementById('addBtn').addEventListener('click', () => {
-  const m = parseFloat(document.getElementById('massa').value) || 10;
-  const x = parseFloat(document.getElementById('posX').value) || 0;
-  const y = parseFloat(document.getElementById('posY').value) || 0;
-  const vx = parseFloat(document.getElementById('velX').value) || 0;
-  const vy = parseFloat(document.getElementById('velY').value) || 0;
-  bodies.push(makeBody(m, x, y, vx, vy));
+document.getElementById('addBtn').addEventListener('click', ()=>{
+  const m=parseFloat(document.getElementById('massa').value)||10;
+  const x=parseFloat(document.getElementById('posX').value)||0;
+  const y=parseFloat(document.getElementById('posY').value)||0;
+  const vx=parseFloat(document.getElementById('velX').value)||0;
+  const vy=parseFloat(document.getElementById('velY').value)||0;
+  bodies.push(makeBody(m,x,y,vx,vy));
   recomputeColors();
 });
 
-document.getElementById('resetBtn').addEventListener('click', () => {
-  bodies = [
-    makeBody(20, -150, 0, 0, 1.2),
-    makeBody(20, 150, 0, 0, -1.2),
-    makeBody(35, 0, 0, 0, 0)
+document.getElementById('resetBtn').addEventListener('click', ()=>{
+  bodies=[
+    makeBody(20,-150,0,0,1.2),
+    makeBody(20,150,0,0,-1.2),
+    makeBody(35,0,0,0,0)
   ];
-  cam.x = 0; cam.y = 0; cam.scale = 1;
+  cam.x=0; cam.y=0; cam.scale=1;
   recomputeColors();
 });
 
-document.getElementById('gRange').addEventListener('input', (e) => {
-  G = parseFloat(e.target.value);
-  document.getElementById('gVal').textContent = `G = ${G.toFixed(2)}`;
-});
-document.getElementById('dtRange').addEventListener('input', (e) => {
-  dt = parseFloat(e.target.value);
-  document.getElementById('dtVal').textContent = `dt = ${dt.toFixed(2)}`;
-});
+document.getElementById('gRange').addEventListener('input',(e)=>{ G=parseFloat(e.target.value); document.getElementById('gVal').textContent=`G = ${G.toFixed(2)}`; });
+document.getElementById('dtRange').addEventListener('input',(e)=>{ dt=parseFloat(e.target.value); document.getElementById('dtVal').textContent=`dt = ${dt.toFixed(2)}`; });
 
-/* === Touch handling (mobile only) === */
-let ongoingTouches = [];
-let touchState = {
-  mode: 'idle',
-  startWorld: null,
-  startScreen: null,
-  lastPan: null,
-  lastDist: 0,
-  lastCenter: null
-};
+/* === Touch handling === */
+let touchState={mode:'idle', startWorld:null, startScreen:null, lastPan:null, lastDist:0, lastCenter:null};
+let holdTimer=null,HOLD_MS=220;
 
-function distTouches(a,b){ const dx=a.clientX-b.clientX, dy=a.clientY-b.clientY; return Math.hypot(dx,dy); }
-function centerTouches(a,b){ return { x:(a.clientX+b.clientX)/2, y:(a.clientY+b.clientY)/2 }; }
+function distTouches(a,b){ return Math.hypot(a.clientX-b.clientX, a.clientY-b.clientY); }
+function centerTouches(a,b){ return {x:(a.clientX+b.clientX)/2, y:(a.clientY+b.clientY)/2}; }
 
-canvas.addEventListener('touchstart', (ev) => {
+canvas.addEventListener('touchstart',(ev)=>{
   ev.preventDefault();
-  const touches = ev.touches;
-  if(touches.length === 1){
-    touchState.mode = 'creating';
-    const t = touches[0];
-    touchState.startScreen = { x: t.clientX, y: t.clientY };
-    touchState.startWorld = screenToWorld(t.clientX, t.clientY);
-    touchState.lastPan = { x: t.clientX, y: t.clientY };
-  } else if(touches.length === 2){
-    touchState.mode = 'pinch';
-    const a = touches[0], b = touches[1];
-    touchState.lastDist = distTouches(a,b);
-    touchState.lastCenter = centerTouches(a,b);
-    touchState.pinchRefWorld = screenToWorld(touchState.lastCenter.x, touchState.lastCenter.y);
-    touchState.startScale = cam.scale;
+  const touches=ev.touches;
+  if(touches.length===1){
+    const t=touches[0];
+    touchState.startScreen={x:t.clientX,y:t.clientY};
+    touchState.startWorld=screenToWorld(t.clientX,t.clientY);
+    touchState.lastPan={x:t.clientX,y:t.clientY};
+    touchState.mode='creating';
+    clearTimeout(holdTimer);
+    holdTimer=setTimeout(()=>{
+      touchState.mode='pan';
+    },HOLD_MS);
+  } else if(touches.length===2){
+    touchState.mode='pinch';
+    const a=touches[0], b=touches[1];
+    touchState.lastDist=distTouches(a,b);
+    touchState.lastCenter=centerTouches(a,b);
+    touchState.pinchRefWorld=screenToWorld(touchState.lastCenter.x,touchState.lastCenter.y);
+    touchState.startScale=cam.scale;
   }
-}, { passive:false });
+},{passive:false});
 
-canvas.addEventListener('touchmove', (ev) => {
+canvas.addEventListener('touchmove',(ev)=>{
   ev.preventDefault();
-  const touches = ev.touches;
-  if(touches.length === 1 && touchState.mode === 'creating'){
-    touchState.lastPan = { x: touches[0].clientX, y: touches[0].clientY };
-  } else if(touches.length === 1 && touchState.mode === 'pan'){
-    const t = touches[0];
-    const dx = t.clientX - touchState.lastPan.x;
-    const dy = t.clientY - touchState.lastPan.y;
-    touchState.lastPan = { x: t.clientX, y: t.clientY };
-    cam.x -= dx / cam.scale;
-    cam.y -= dy / cam.scale;
-  } else if(touches.length === 2 && touchState.mode === 'pinch'){
-    const a = touches[0], b = touches[1];
-    const newDist = distTouches(a,b);
-    const center = centerTouches(a,b);
-    const factor = newDist / (touchState.lastDist || newDist);
-    const newScale = Math.max(0.08, Math.min(8, touchState.startScale * factor));
-    const screenCenter = { x: center.x, y: center.y };
-    const worldAtScreenBefore = touchState.pinchRefWorld;
-    cam.scale = newScale;
-    cam.x = worldAtScreenBefore.x - (screenCenter.x - canvas.clientWidth/2) / cam.scale;
-    cam.y = worldAtScreenBefore.y - (screenCenter.y - canvas.clientHeight/2) / cam.scale;
+  const touches=ev.touches;
+  if(touches.length===1){
+    const t=touches[0];
+    if(touchState.mode==='pan'){
+      const dx=t.clientX-touchState.lastPan.x, dy=t.clientY-touchState.lastPan.y;
+      touchState.lastPan={x:t.clientX,y:t.clientY};
+      cam.x-=dx/cam.scale; cam.y-=dy/cam.scale;
+    } else if(touchState.mode==='creating'){
+      const dx=t.clientX-touchState.startScreen.x, dy=t.clientY-touchState.startScreen.y;
+      if(Math.hypot(dx,dy)>8) clearTimeout(holdTimer);
+    }
+  } else if(touches.length===2 && touchState.mode==='pinch'){
+    const a=touches[0], b=touches[1];
+    const newDist=distTouches(a,b), center=centerTouches(a,b);
+    const factor=newDist/(touchState.lastDist||newDist);
+    const newScale=Math.max(0.08, Math.min(8, touchState.startScale*factor));
+    const screenCenter={x:center.x,y:center.y};
+    const worldAtScreenBefore=touchState.pinchRefWorld;
+    cam.scale=newScale;
+    cam.x=worldAtScreenBefore.x-(screenCenter.x-canvas.clientWidth/2)/cam.scale;
+    cam.y=worldAtScreenBefore.y-(screenCenter.y-canvas.clientHeight/2)/cam.scale;
   }
-}, { passive:false });
+},{passive:false});
 
-canvas.addEventListener('touchend', (ev) => {
-  ev.preventDefault();
-  if(touchState.mode === 'creating'){
-    const changed = ev.changedTouches[0];
+canvas.addEventListener('touchend',(ev)=>{
+  clearTimeout(holdTimer);
+  if(touchState.mode==='creating'){
+    const changed=ev.changedTouches[0];
     if(changed){
-      const endScreen = { x: changed.clientX, y: changed.clientY };
-      const startScreen = touchState.startScreen;
-      const dx = endScreen.x - startScreen.x;
-      const dy = endScreen.y - startScreen.y;
-      const vx = dx * 0.02;
-      const vy = dy * 0.02;
-      const m = parseFloat(document.getElementById('massa').value) || 10;
-      const pos = touchState.startWorld || screenToWorld(startScreen.x, startScreen.y);
-      bodies.push(makeBody(m, pos.x, pos.y, vx, vy));
+      const endScreen={x:changed.clientX,y:changed.clientY};
+      const dx=endScreen.x-touchState.startScreen.x;
+      const dy=endScreen.y-touchState.startScreen.y;
+      const vx=dx*0.02, vy=dy*0.02;
+      const m=parseFloat(document.getElementById('massa').value)||10;
+      const pos=touchState.startWorld||screenToWorld(endScreen.x,endScreen.y);
+      bodies.push(makeBody(m,pos.x,pos.y,vx,vy));
       recomputeColors();
     }
   }
-  touchState.mode = 'idle';
-  touchState.lastDist = 0;
-  touchState.pinchRefWorld = null;
-}, { passive:false });
+  touchState.mode='idle';
+  touchState.lastDist=0;
+  touchState.pinchRefWorld=null;
+},{passive:false});
 
-canvas.addEventListener('touchcancel', (ev) => { touchState.mode='idle'; });
+canvas.addEventListener('touchcancel',(ev)=>{ touchState.mode='idle'; clearTimeout(holdTimer); });
+canvas.addEventListener('dblclick',(ev)=>{ 
+  cam.x=0;
+  cam.y=0; 
+  cam.scale=1;
+});
 
-canvas.addEventListener('dblclick', (ev) => { cam.x = 0; cam.y = 0; cam.scale = 1; });
+/* === Optional: orientation change === */
+window.addEventListener('orientationchange', ()=>{ fitCanvas(); });
 
-let holdTimer = null;
-const HOLD_MS = 220;
-canvas.addEventListener('touchstart', (ev) => {
-  if(ev.touches.length !== 1) return;
-  clearTimeout(holdTimer);
-  const t = ev.touches[0];
-  holdTimer = setTimeout(() => {
-    touchState.mode = 'pan';
-    touchState.lastPan = { x: t.clientX, y: t.clientY };
-  }, HOLD_MS);
-}, { passive:false });
-
-canvas.addEventListener('touchmove', (ev) => {
-  if(ev.touches.length === 1 && touchState.mode === 'pan'){
-    const t = ev.touches[0];
-    const dx = t.clientX - touchState.lastPan.x;
-    const dy = t.clientY - touchState.lastPan.y;
-    touchState.lastPan = { x: t.clientX, y: t.clientY };
-    cam.x -= dx / cam.scale;
-    cam.y -= dy / cam.scale;
-  } else {
-    if(ev.touches.length === 1 && touchState.mode === 'creating'){
-      const t = ev.touches[0];
-      const dx = t.clientX - (touchState.startScreen ? touchState.startScreen.x : t.clientX);
-      const dy = t.clientY - (touchState.startScreen ? touchState.startScreen.y : t.clientY);
-      if(Math.hypot(dx,dy) > 8){
-        clearTimeout(holdTimer);
-      }
-    }
-  }
-}, { passive:false });
-
-canvas.addEventListener('touchend', (ev) => { clearTimeout(holdTimer); }, { passive:false });
-
-window.addEventListener('orientationchange', () => { fitCanvas(); });
-
+/* === initialization color recompute === */
 recomputeColors();
+
 </script>
 </body>
 </html>
