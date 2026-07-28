@@ -85,14 +85,14 @@ function fitCanvas(){
 fitCanvas();
 addEventListener('resize', fitCanvas);
 
-const cam = { x: 0, y: 0, scale: 1 };
+const cam = { x: 0, y: 0, scale: 5 };
 function worldToScreen(p){ const cx = canvas.clientWidth/2, cy = canvas.clientHeight/2; return { x: (p.x - cam.x)*cam.scale + cx, y: (p.y - cam.y)*cam.scale + cy }; }
 function screenToWorld(sx, sy){ const cx = canvas.clientWidth/2, cy = canvas.clientHeight/2; return { x: cam.x + (sx - cx)/cam.scale, y: cam.y + (sy - cy)/cam.scale }; }
 
 /* === Simulation state === */
 let G = parseFloat(document.getElementById('gRange').value);
 let dt = parseFloat(document.getElementById('dtRange').value);
-const MAX_TRAIL = 450;
+const MAX_TRAIL = 1000;
 
 function makeBody(m, x, y, vx=0, vy=0){ return { m, x, y, vx, vy, rgb:[200,200,255], trail:[] }; }
 
